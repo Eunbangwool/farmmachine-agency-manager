@@ -55,7 +55,7 @@ push 시 GitHub Actions(`.github/workflows/build.yml`)가 양 모듈 컴파일�
 
 ## 구축 로드맵 (점진)
 - [x] **1. 골격** — Gradle 멀티플랫폼, 모듈, 브랜딩, 도메인 모델, 양 플랫폼 placeholder, firestore.rules, CI
-- [ ] **2. 인증/멤버십** — Google 로그인 + 대리점 코드 생성/가입 (농작이 UserManager/Membership 이식)
+- [x] **2. 인증/멤버십** — Google 로그인 + 대리점 코드 생성/가입 (Android UserManager/DealershipMembership, Web AuthManager/window.nongdori 브리지)
 - [ ] **3. 레포지토리** — WorkOrder/Customer/Machine (web JSON 브리지 + Android Firestore 매퍼)
 - [ ] **4. 웹 출장 생성 → 배차 보드**
 - [ ] **5. Android 엔지니어 — 출장 목록/상세/수리 입력**

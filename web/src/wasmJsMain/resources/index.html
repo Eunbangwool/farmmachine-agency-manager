@@ -6,6 +6,9 @@
     <title>농돌이 — 농기계 대리점 출장·수리 관리</title>
     <link rel="manifest" href="manifest.webmanifest">
     <meta name="theme-color" content="#2A2826">
+    <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js" crossorigin>
+    <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js" crossorigin>
+    <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js" crossorigin>
     <link rel="preload" as="script" href="nongdori-web.js">
     <style>
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #FAF9F4; }
@@ -17,34 +20,119 @@
             transition: opacity .3s ease;
         }
         #loading.hide { opacity: 0; }
-        .spinner {
-            width: 36px; height: 36px; border: 3px solid #DDD9CC; border-top-color: #555350;
-            border-radius: 50%; animation: spin 1s linear infinite;
-        }
+        .spinner { width: 36px; height: 36px; border: 3px solid #DDD9CC; border-top-color: #555350; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
-    <div id="loading">
-        <div class="spinner"></div>
-        <div>농돌이 불러오는 중…</div>
-    </div>
+    <div id="loading"><div class="spinner"></div><div>농돌이 불러오는 중…</div></div>
     <div id="compose-target"></div>
 
-    <!-- Compose Multiplatform WASM 번들 -->
-    <script src="nongdori-web.js"></script>
+    <!-- ============================================================
+         Firebase JS SDK 브리지 — window.nongdori 글로벌.
+         Kotlin/WASM(@JsFun) 에서 이 함수들을 호출한다.
+
+         ⚠️ TODO: 아래 firebaseConfig 를 새 Firebase 프로젝트의 실제 값으로 교체.
+            (Firebase 콘솔 → 프로젝트 설정 → 웹 앱 → SDK 설정/구성)
+    ============================================================ -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+        import {
+            getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
+        } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+        import {
+            getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc,
+            collection, collectionGroup, query, where, getDocs, onSnapshot
+        } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+        // TODO: 실제 값으로 교체
+        const firebaseConfig = {
+            apiKey: "TODO_API_KEY",
+            authDomain: "TODO.firebaseapp.com",
+            projectId: "TODO_PROJECT_ID",
+            storageBucket: "TODO.appspot.com",
+            messagingSenderId: "TODO_SENDER_ID",
+            appId: "TODO_APP_ID"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        function pathToRef(path) {
+            const parts = path.split('/').filter(p => p.length > 0);
+            // 짝수 개 = 도큐먼트 경로
+            return doc(db, parts[0], ...parts.slice(1));
+        }
+        function colRef(path) {
+            const parts = path.split('/').filter(p => p.length > 0);
+            return collection(db, parts[0], ...parts.slice(1));
+        }
+
+        window.nongdori = {
+            ready: true,
+            // ── Auth ──
+            signInGoogle: () => signInWithPopup(auth, new GoogleAuthProvider()),
+            signOut: () => signOut(auth),
+            currentUser: () => auth.currentUser,
+            onAuthStateChanged: (cb) => onAuthStateChanged(auth, cb),
+
+            // ── Firestore ──
+            getDocByPath: async (path) => {
+                const snap = await getDoc(pathToRef(path));
+                if (!snap.exists()) return '';
+                return JSON.stringify({ id: snap.id, ...snap.data() });
+            },
+            setDocByPath: (path, jsonData) => {
+                const data = JSON.parse(jsonData);
+                delete data.id;
+                return setDoc(pathToRef(path), data, { merge: true });
+            },
+            updateDocByPath: (path, jsonData) => {
+                const data = JSON.parse(jsonData);
+                delete data.id;
+                return updateDoc(pathToRef(path), data);
+            },
+            deleteDocByPath: (path) => deleteDoc(pathToRef(path)),
+            observeCollection: (path, cb) => {
+                return onSnapshot(colRef(path), (snap) => {
+                    const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                    cb(JSON.stringify(arr));
+                }, (err) => { console.warn('observeCollection err', err); cb('[]'); });
+            },
+            findMyDealerships: async (cb) => {
+                try {
+                    const u = auth.currentUser;
+                    if (!u) { cb('[]'); return; }
+                    const q = query(collectionGroup(db, 'members'), where('uid', '==', u.uid));
+                    const snap = await getDocs(q);
+                    const codes = snap.docs.map(d => d.ref.parent.parent && d.ref.parent.parent.id).filter(Boolean);
+                    cb(JSON.stringify(codes));
+                } catch (err) { console.warn('findMyDealerships err', err); cb('[]'); }
+            },
+            downloadTextFile: (filename, text, mimeType) => {
+                const blob = new Blob([text], { type: mimeType || 'text/plain;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = filename; a.click();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }
+        };
+
+        // Firebase 준비 후 WASM 번들 로드.
+        const wasmScript = document.createElement('script');
+        wasmScript.src = 'nongdori-web.js';
+        document.body.appendChild(wasmScript);
+    </script>
 
     <script>
-        // 첫 Compose frame(compose-target 자식 추가) 시 로딩 스피너 숨김. 8초 안전 타임아웃.
         function hideLoading() {
             var el = document.getElementById("loading");
             if (el) el.classList.add("hide");
             setTimeout(function () { if (el && el.parentNode) el.parentNode.removeChild(el); }, 300);
         }
         var observer = new MutationObserver(function (mutations) {
-            for (var m of mutations) {
-                if (m.addedNodes.length > 0) { hideLoading(); observer.disconnect(); return; }
-            }
+            for (var m of mutations) { if (m.addedNodes.length > 0) { hideLoading(); observer.disconnect(); return; } }
         });
         var target = document.getElementById("compose-target");
         if (target) observer.observe(target, { childList: true, subtree: true });

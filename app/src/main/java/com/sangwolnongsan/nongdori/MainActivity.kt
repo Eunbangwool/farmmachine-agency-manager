@@ -10,26 +10,42 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.sangwolnongsan.nongdori.data.DealershipMembership
 import com.sangwolnongsan.nongdori.shared.ui.theme.NongdoriTheme
 import com.sangwolnongsan.nongdori.shared.ui.theme.TextSecondary
+import com.sangwolnongsan.nongdori.ui.screens.DealerCodeScreen
+import com.sangwolnongsan.nongdori.ui.screens.LoginScreen
+import kotlinx.coroutines.launch
 
 /**
  * 농돌이 — 농기계 대리점 현장 엔지니어용 Android 앱.
  *
- * 현 단계: 골격(scaffold). 이후 인증 → 출장 목록/상세 → 수리 입력 순으로 구축.
+ * 진입 흐름: Firebase 설정 확인 → Google 로그인 → 대리점 생성/가입 → 홈.
+ * 홈(출장 목록/상세/수리 입력)은 다음 단계에서 구축.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppContainer.init(applicationContext)
         setContent {
             NongdoriTheme {
                 Scaffold { padding ->
-                    HomePlaceholder(Modifier.padding(padding))
+                    Column(Modifier.fillMaxSize().padding(padding)) {
+                        AppRoot()
+                    }
                 }
             }
         }
@@ -37,19 +53,127 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun HomePlaceholder(modifier: Modifier = Modifier) {
+private fun AppRoot() {
+    if (!AppContainer.isFirebaseReady) {
+        ConfigNeeded()
+        return
+    }
+
+    val user by AppContainer.userManager.currentUser.collectAsState()
+    val scope = rememberCoroutineScope()
+    var loading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var dealerCode by remember { mutableStateOf(AppContainer.dealerCodeManager.dealerCode) }
+
+    // 로그인되면 운영자 부트스트랩 + 내 대리점 자동 탐색.
+    LaunchedEffect(user?.uid) {
+        if (user != null && dealerCode.isNullOrBlank()) {
+            runCatching { DealershipMembership.bootstrapOwnerIfAdmin() }
+            val mine = runCatching { DealershipMembership.findMyMemberDealerships() }.getOrDefault(emptyList())
+            mine.firstOrNull()?.let {
+                AppContainer.dealerCodeManager.dealerCode = it
+                dealerCode = it
+            }
+        }
+    }
+
+    when {
+        user == null -> LoginScreen(
+            loading = loading,
+            error = error,
+            onSignIn = {
+                loading = true; error = null
+                scope.launch {
+                    val result = AppContainer.userManager.signInWithGoogle(BuildConfig.GOOGLE_WEB_CLIENT_ID)
+                    loading = false
+                    if (result.isFailure) error = "로그인 실패: ${result.exceptionOrNull()?.message}"
+                }
+            },
+        )
+
+        dealerCode.isNullOrBlank() -> DealerCodeScreen(
+            loading = loading,
+            error = error,
+            onCreate = { name ->
+                loading = true; error = null
+                scope.launch {
+                    val code = DealershipMembership.generateDealerCode()
+                    when (val r = DealershipMembership.createNewDealership(code, name)) {
+                        is DealershipMembership.CreateResult.Success -> {
+                            AppContainer.dealerCodeManager.dealerCode = code
+                            dealerCode = code
+                        }
+                        is DealershipMembership.CreateResult.Error -> error = "생성 실패: ${r.message}"
+                        else -> error = "대리점 생성에 실패했습니다."
+                    }
+                    loading = false
+                }
+            },
+            onJoin = { code ->
+                loading = true; error = null
+                scope.launch {
+                    // 초대 수락 시도 → 멤버 확인. (초대받지 않았다면 관리자에게 초대 요청 필요.)
+                    DealershipMembership.acceptInvitation(code)
+                    if (DealershipMembership.isMember(code)) {
+                        AppContainer.dealerCodeManager.dealerCode = code
+                        dealerCode = code
+                    } else {
+                        error = "가입 실패: 초대가 필요하거나 코드가 올바르지 않습니다."
+                    }
+                    loading = false
+                }
+            },
+            onSignOut = { scope.launch { AppContainer.userManager.signOut(); dealerCode = null } },
+        )
+
+        else -> HomePlaceholder(
+            dealerCode = dealerCode!!,
+            onSignOut = { scope.launch { AppContainer.userManager.signOut(); dealerCode = null } },
+        )
+    }
+}
+
+@Composable
+private fun ConfigNeeded() {
     Column(
-        modifier = modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier.fillMaxSize().padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         Text("농돌이", style = MaterialTheme.typography.headlineLarge)
         Text(
-            "농기계 대리점 출장·수리 관리",
+            "Firebase 설정이 필요합니다.\napp/google-services.json 을 배치한 뒤 다시 실행하세요.",
             style = MaterialTheme.typography.bodyMedium,
             color = TextSecondary,
             textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 12.dp),
+        )
+    }
+}
+
+@Composable
+private fun HomePlaceholder(dealerCode: String, onSignOut: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text("농돌이", style = MaterialTheme.typography.headlineLarge)
+        Text(
+            "대리점 코드: $dealerCode",
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextSecondary,
             modifier = Modifier.padding(top = 8.dp),
         )
+        Text(
+            "출장 목록 / 수리 입력 화면은 다음 단계에서 추가됩니다.",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextSecondary,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 16.dp),
+        )
+        TextButton(onClick = onSignOut, modifier = Modifier.padding(top = 24.dp)) {
+            Text("로그아웃", color = TextSecondary)
+        }
     }
 }
