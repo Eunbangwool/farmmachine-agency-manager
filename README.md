@@ -13,7 +13,7 @@
 1. **출장관리** — 서비스콜(WorkOrder) 생성, 고객/기계 정보, 엔지니어 배정, 배차 보드, 라이브 위치/ETA
 2. **수리진행상황** — 상태 워크플로 `접수 → 배정 → 출동 → 진행중 → 완료`(+ 취소)
 3. **수리이력** — 고객별/기계별 완료 내역(작업·부품·금액)
-4. **재고관리** — *PHASE 2 (예정)*. 현재는 모델 stub(`Part`) + `PartUsage.partId` 훅만 존재
+4. **재고관리** — 부품 재고 등록/수정, 재고 +/- 조정, 재주문 기준 미달 강조 (웹 ‘재고’ 탭)
 
 ## 모듈 구조
 ```
@@ -33,7 +33,7 @@ dealerships/{dealerCode}
   machines/{machineId}     고객 보유 기계
   workOrders/{id}          출장 서비스콜 (RepairRecord 임베드, 고객/기계 스냅샷)
   liveLocations/{uid}      엔지니어 GPS
-  parts/{partId}           재고 — PHASE 2 (현재 규칙 미정의 = 차단)
+  parts/{partId}           재고 부품
 ```
 **수리 이력은 별도 컬렉션이 아니다** — `status == DONE` 인 WorkOrder 를 `customerId`/`machineId` 로 조회한다(FSM 표준).
 
@@ -63,4 +63,4 @@ push 시 GitHub Actions(`.github/workflows/build.yml`)가 양 모듈 컴파일�
 - [x] **5. Android 엔지니어 — 출장 목록/상세/수리 입력** (배정 출장 목록, 고객 전화/길찾기, 상태 진행, 수리 입력→완료)
 - [x] **6. 수리 이력 + CSV export** (웹 디스패처 ‘수리 이력’ 탭: 완료 출장 목록·금액 + CSV 내보내기)
 - [x] **7. 엔지니어 라이브 위치 / ETA** (Android: 출동 시 위치 공유 Foreground Service; Web: ‘기사 위치’ 탭 — 마지막 위치·직선 ETA + VWorld 지도 페이지)
-- [ ] **8. 재고관리 (PHASE 2)**
+- [x] **8. 재고관리** (웹 ‘재고’ 탭: 부품 등록/수정, 재고 +/- 조정, 재주문 기준 미달 강조)

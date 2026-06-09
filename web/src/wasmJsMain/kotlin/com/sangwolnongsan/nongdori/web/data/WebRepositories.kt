@@ -2,7 +2,9 @@ package com.sangwolnongsan.nongdori.web.data
 
 import com.sangwolnongsan.nongdori.shared.data.Customer
 import com.sangwolnongsan.nongdori.shared.data.DealershipMember
+import com.sangwolnongsan.nongdori.shared.data.Part
 import com.sangwolnongsan.nongdori.shared.data.WorkOrder
+import com.sangwolnongsan.nongdori.web.firebase.jsDeleteDoc
 import com.sangwolnongsan.nongdori.web.firebase.jsObserveCollection
 import com.sangwolnongsan.nongdori.web.firebase.jsSetDoc
 import kotlinx.serialization.decodeFromString
@@ -48,6 +50,21 @@ object WebRepositories {
         jsObserveCollection("dealerships/$code/liveLocations") { arr ->
             onUpdate(parseList(arr) { json.decodeFromString<List<com.sangwolnongsan.nongdori.shared.data.LiveLocation>>(it) })
         }
+    }
+
+    // ── 재고 부품 ──
+    fun observeParts(code: String, onUpdate: (List<Part>) -> Unit) {
+        jsObserveCollection("dealerships/$code/parts") { arr ->
+            onUpdate(parseList(arr) { json.decodeFromString<List<Part>>(it) })
+        }
+    }
+
+    fun savePart(code: String, part: Part, onResult: (Boolean) -> Unit = {}) {
+        jsSetDoc("dealerships/$code/parts/${part.id}", json.encodeToString(part)) { onResult(it == "ok") }
+    }
+
+    fun deletePart(code: String, partId: String, onResult: (Boolean) -> Unit = {}) {
+        jsDeleteDoc("dealerships/$code/parts/$partId") { onResult(it == "ok") }
     }
 
     // ── Members (엔지니어 배정 선택용) ──

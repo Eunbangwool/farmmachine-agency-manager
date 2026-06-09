@@ -109,7 +109,12 @@ service cloud.firestore {
         allow write: if isAuthed() && uid == request.auth.uid;
       }
 
-      // ── parts/{partId} (재고관리) — PHASE 2. 현재 규칙 미정의 = 접근 차단. ──
+      // ── 재고 부품 ──
+      match /parts/{partId} {
+        allow read: if isMember(code);
+        allow create, update: if isMember(code);
+        allow delete: if isManager(code);
+      }
     }
   }
 }

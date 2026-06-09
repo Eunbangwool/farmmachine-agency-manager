@@ -3,11 +3,10 @@ package com.sangwolnongsan.nongdori.shared.data
 import kotlinx.serialization.Serializable
 
 /**
- * 재고 부품 — PHASE 2 (재고관리) 용 stub.
+ * 재고 부품 — dealerships/{dealerCode}/parts/{partId}.
  *
- * 현재 단계(출장/수리)에서는 사용하지 않는다. WorkOrder 의 RepairRecord.partsUsed 에
- * PartUsage(partId=...) 로 연결될 예정이며, 재고관리 단계에서 stockQty 차감 로직을 붙인다.
- * dealerships/{dealerCode}/parts/{partId} (규칙 미정의 = 현재 접근 차단).
+ * 웹 디스패처의 '재고' 탭에서 등록/수정/재고 조정한다. RepairRecord.partsUsed 의
+ * PartUsage(partId=...) 로 수리에 연결할 수 있다(자동 차감은 후속 개선).
  */
 @Serializable
 data class Part(
