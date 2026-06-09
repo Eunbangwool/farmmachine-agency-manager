@@ -100,18 +100,10 @@ private fun WebRoot() {
             onSignOut = { AuthManager.signOut(); dealerCode = null },
         )
 
-        else -> CenteredColumn {
-            Text("농돌이", style = MaterialTheme.typography.headlineLarge)
-            Text("대리점 코드: ${dealerCode!!}", color = TextSecondary, modifier = Modifier.padding(top = 8.dp))
-            Text(
-                "배차 보드 / 출장 생성 / 고객 / 이력 화면은 다음 단계에서 추가됩니다.",
-                style = MaterialTheme.typography.bodySmall, color = TextSecondary,
-                textAlign = TextAlign.Center, modifier = Modifier.padding(top = 16.dp),
-            )
-            TextButton(onClick = { AuthManager.signOut(); dealerCode = null }, modifier = Modifier.padding(top = 24.dp)) {
-                Text("로그아웃", color = TextSecondary)
-            }
-        }
+        else -> com.sangwolnongsan.nongdori.web.ui.DispatcherHome(
+            dealerCode = dealerCode!!,
+            onSignOut = { AuthManager.signOut(); dealerCode = null },
+        )
     }
 }
 
