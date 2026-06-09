@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>기사 위치 — VWorld</title>
+    <link rel="stylesheet" href="ol.css">
+    <script src="ol.js"></script>
+    <style>
+        html, body, #map { margin: 0; padding: 0; width: 100%; height: 100%; }
+        #label {
+            position: absolute; top: 12px; left: 12px; z-index: 10;
+            background: rgba(255,255,255,.92); padding: 8px 12px; border-radius: 8px;
+            font-family: -apple-system, system-ui, sans-serif; font-size: 14px; color: #1F2421;
+            box-shadow: 0 1px 4px rgba(0,0,0,.2);
+        }
+        .marker { width: 18px; height: 18px; background: #B54B40; border: 3px solid #fff; border-radius: 50%; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+    </style>
+</head>
+<body>
+    <div id="label">기사 위치</div>
+    <div id="map"></div>
+    <div id="marker" class="marker"></div>
+    <script>
+        // 농작이와 동일한 VWorld WMTS 타일 설정.
+        // ⚠️ TODO: VWorld API 키를 발급받아 ?key= 로 전달하거나 아래 기본값을 교체.
+        const qs = new URLSearchParams(location.search);
+        const lat = parseFloat(qs.get('lat')) || 36.5;
+        const lng = parseFloat(qs.get('lng')) || 127.8;
+        const label = qs.get('label') || '기사 위치';
+        const key = qs.get('key') || 'TODO_VWORLD_KEY';
+        document.getElementById('label').textContent = label + ' · ' + lat.toFixed(5) + ', ' + lng.toFixed(5);
+
+        const satUrl = 'https://api.vworld.kr/req/wmts/1.0.0/' + key + '/Satellite/{z}/{y}/{x}.jpeg';
+        const hybridUrl = 'https://api.vworld.kr/req/wmts/1.0.0/' + key + '/Hybrid/{z}/{y}/{x}.png';
+
+        const center = ol.proj.fromLonLat([lng, lat]);
+        const map = new ol.Map({
+            target: 'map',
+            layers: [
+                new ol.layer.Tile({ source: new ol.source.XYZ({ url: satUrl, crossOrigin: 'anonymous' }) }),
+                new ol.layer.Tile({ source: new ol.source.XYZ({ url: hybridUrl, crossOrigin: 'anonymous' }) }),
+            ],
+            view: new ol.View({ center: center, zoom: 15 }),
+        });
+
+        // 위치 마커 (Overlay).
+        const markerEl = document.getElementById('marker');
+        map.addOverlay(new ol.Overlay({ position: center, positioning: 'center-center', element: markerEl, stopEvent: false }));
+    </script>
+</body>
+</html>

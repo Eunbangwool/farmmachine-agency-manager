@@ -1,7 +1,10 @@
 package com.sangwolnongsan.nongdori.ui.screens
 
+import android.Manifest
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -125,6 +128,15 @@ private fun WorkOrderDetail(
     onSave: (WorkOrder) -> Unit,
 ) {
     val context = LocalContext.current
+    // 위치 권한 부여 후 출동(DISPATCHED) 전환 + 위치 공유 서비스 시작.
+    val locationPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        val granted = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (granted) com.sangwolnongsan.nongdori.service.LocationTrackingService.start(context)
+        onSave(wo.advanced(now()))
+    }
     var diagnosis by remember(wo.id) { mutableStateOf(wo.repair.diagnosis) }
     var work by remember(wo.id) { mutableStateOf(wo.repair.workDescription) }
     var parts by remember(wo.id) { mutableStateOf(wo.repair.partsUsed.firstOrNull()?.name ?: "") }
@@ -160,7 +172,16 @@ private fun WorkOrderDetail(
                 Text("상태: ${wo.status.displayName}", color = repairStatusColor(wo.status), fontWeight = FontWeight.SemiBold)
                 if (wo.symptom.isNotBlank()) Text("증상: ${wo.symptom}")
                 if (wo.status.isOpen && wo.status != RepairStatus.IN_PROGRESS) {
-                    OutlinedButton(onClick = { onSave(wo.advanced(now())) }) {
+                    OutlinedButton(onClick = {
+                        if (wo.status.next() == RepairStatus.DISPATCHED) {
+                            // 출동 전환: 위치 권한 요청 → 위치 공유 서비스 시작.
+                            locationPermLauncher.launch(
+                                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+                            )
+                        } else {
+                            onSave(wo.advanced(now()))
+                        }
+                    }) {
                         Text("→ ${wo.status.next().displayName} 로 진행")
                     }
                 }
@@ -181,6 +202,7 @@ private fun WorkOrderDetail(
             ) { Text("임시 저장") }
             Button(
                 onClick = {
+                    com.sangwolnongsan.nongdori.service.LocationTrackingService.stop(context)
                     val done = wo.withStatus(RepairStatus.DONE, now())
                         .copy(repair = buildRepair(wo, diagnosis, work, parts, laborCost, engineerName, inProgress = false))
                     onSave(done)

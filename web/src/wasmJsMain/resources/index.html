@@ -116,6 +116,14 @@
                 const a = document.createElement('a');
                 a.href = url; a.download = filename; a.click();
                 setTimeout(() => URL.revokeObjectURL(url), 1000);
+            },
+            // VWorld 지도 페이지(새 탭)로 좌표 + 마커 표시.
+            // ⚠️ TODO: VWORLD_KEY 를 발급받은 키로 교체.
+            openVworldMap: (lat, lng, label) => {
+                const VWORLD_KEY = 'TODO_VWORLD_KEY';
+                const u = 'map/engineer_map.html?lat=' + lat + '&lng=' + lng +
+                    '&label=' + encodeURIComponent(label || '') + '&key=' + encodeURIComponent(VWORLD_KEY);
+                window.open(u, '_blank');
             }
         };
 

@@ -57,3 +57,7 @@ external fun jsFindMyDealerships(callback: (String) -> Unit)
 /** 텍스트 파일 download (CSV 내보내기 등). */
 @JsFun("(filename, text, mimeType) => window.nongdori.downloadTextFile(filename, text, mimeType || '')")
 external fun jsDownloadTextFile(filename: String, text: String, mimeType: String)
+
+/** VWorld 지도 페이지를 새 탭으로 열어 해당 좌표에 마커 표시. */
+@JsFun("(lat, lng, label) => window.nongdori.openVworldMap(lat, lng, label || '')")
+external fun jsOpenVworldMap(lat: Double, lng: Double, label: String)

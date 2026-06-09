@@ -45,6 +45,8 @@ dealerships/{dealerCode}
    - Android: `local.properties` 에 `GOOGLE_WEB_CLIENT_ID=...` 또는 CI Secret.
    - Web: `web/.../index.html` 의 Firebase config (인증 단계에서 추가 예정).
 4. Firestore 규칙 배포: `firebase deploy --only firestore:rules`.
+5. (선택) 기사 위치 VWorld 지도: [VWorld](https://www.vworld.kr) API 키 발급 →
+   `web/.../index.html` 의 `VWORLD_KEY` 와 `map/engineer_map.html` 의 기본 키(TODO) 교체.
 
 ## 빌드
 ```bash
@@ -60,5 +62,5 @@ push 시 GitHub Actions(`.github/workflows/build.yml`)가 양 모듈 컴파일�
 - [x] **4. 웹 출장 생성 → 배차 보드** — 출장 생성 폼(고객+기계+증상+우선순위+엔지니어 배정) + RepairStatus 칸반 보드(상태 전진)
 - [x] **5. Android 엔지니어 — 출장 목록/상세/수리 입력** (배정 출장 목록, 고객 전화/길찾기, 상태 진행, 수리 입력→완료)
 - [x] **6. 수리 이력 + CSV export** (웹 디스패처 ‘수리 이력’ 탭: 완료 출장 목록·금액 + CSV 내보내기)
-- [ ] **7. 엔지니어 라이브 위치 / ETA**
+- [x] **7. 엔지니어 라이브 위치 / ETA** (Android: 출동 시 위치 공유 Foreground Service; Web: ‘기사 위치’ 탭 — 마지막 위치·직선 ETA + VWorld 지도 페이지)
 - [ ] **8. 재고관리 (PHASE 2)**
