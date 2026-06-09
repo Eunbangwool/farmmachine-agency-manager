@@ -20,6 +20,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -68,18 +69,20 @@ fun DispatcherHome(dealerCode: String, onSignOut: () -> Unit) {
             Spacer(Modifier.weight(1f))
             TextButton(onClick = onSignOut) { Text("로그아웃", color = TextSecondary) }
         }
-        TabRow(selectedTabIndex = tab) {
+        ScrollableTabRow(selectedTabIndex = tab, edgePadding = 0.dp) {
             Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("배차 보드") })
             Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("출장 생성") })
-            Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("기사 위치") })
-            Tab(selected = tab == 3, onClick = { tab = 3 }, text = { Text("재고") })
-            Tab(selected = tab == 4, onClick = { tab = 4 }, text = { Text("수리 이력") })
+            Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("고객") })
+            Tab(selected = tab == 3, onClick = { tab = 3 }, text = { Text("기사 위치") })
+            Tab(selected = tab == 4, onClick = { tab = 4 }, text = { Text("재고") })
+            Tab(selected = tab == 5, onClick = { tab = 5 }, text = { Text("수리 이력") })
         }
         when (tab) {
             0 -> DispatchBoard(dealerCode, workOrders)
             1 -> WorkOrderForm(dealerCode, onCreated = { tab = 0 })
-            2 -> EngineerLiveScreen(dealerCode, workOrders)
-            3 -> InventoryView(dealerCode)
+            2 -> CustomerView(dealerCode, workOrders)
+            3 -> EngineerLiveScreen(dealerCode, workOrders)
+            4 -> InventoryView(dealerCode)
             else -> RepairHistoryView(workOrders)
         }
     }

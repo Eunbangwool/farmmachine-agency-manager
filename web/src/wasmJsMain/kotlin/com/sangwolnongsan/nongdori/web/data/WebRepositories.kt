@@ -45,6 +45,10 @@ object WebRepositories {
         jsSetDoc("dealerships/$code/customers/${customer.id}", json.encodeToString(customer)) { onResult(it == "ok") }
     }
 
+    fun deleteCustomer(code: String, customerId: String, onResult: (Boolean) -> Unit = {}) {
+        jsDeleteDoc("dealerships/$code/customers/$customerId") { onResult(it == "ok") }
+    }
+
     // ── 라이브 위치 (출동 중 엔지니어) ──
     fun observeLiveLocations(code: String, onUpdate: (List<com.sangwolnongsan.nongdori.shared.data.LiveLocation>) -> Unit) {
         jsObserveCollection("dealerships/$code/liveLocations") { arr ->

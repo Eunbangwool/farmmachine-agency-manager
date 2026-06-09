@@ -1,5 +1,6 @@
 package com.sangwolnongsan.nongdori.web.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -50,10 +51,13 @@ fun WorkOrderForm(dealerCode: String, onCreated: () -> Unit) {
     var engineerUid by remember { mutableStateOf<String?>(null) }
     var engineerName by remember { mutableStateOf("") }
     var members by remember { mutableStateOf<List<DealershipMember>>(emptyList()) }
+    var customers by remember { mutableStateOf<List<Customer>>(emptyList()) }
+    var selectedCustomerId by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
 
     LaunchedEffect(dealerCode) {
         WebRepositories.observeMembers(dealerCode) { members = it }
+        WebRepositories.observeCustomers(dealerCode) { customers = it }
     }
 
     Column(
@@ -63,7 +67,24 @@ fun WorkOrderForm(dealerCode: String, onCreated: () -> Unit) {
         Text("새 출장", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
 
         Text("고객", color = TextSecondary, style = MaterialTheme.typography.labelLarge)
-        OutlinedTextField(name, { name = it }, label = { Text("고객 이름") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(
+            name,
+            { name = it; selectedCustomerId = null }, // 이름 직접 수정 시 기존 고객 선택 해제
+            label = { Text("고객 이름") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+        )
+        // 기존 고객 매칭 제안 (이름 입력 중, 미선택 상태일 때).
+        if (selectedCustomerId == null && name.isNotBlank()) {
+            val matches = customers.filter { it.name.contains(name, true) || it.phone.contains(name) }.take(5)
+            matches.forEach { c ->
+                Text(
+                    "기존 고객 선택: ${c.name}${if (c.phone.isNotBlank()) " · ${c.phone}" else ""}",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        selectedCustomerId = c.id; name = c.name; phone = c.phone; address = c.address
+                    }.padding(vertical = 4.dp),
+                )
+            }
+        }
         OutlinedTextField(phone, { phone = it }, label = { Text("연락처") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(address, { address = it }, label = { Text("주소") }, singleLine = true, modifier = Modifier.fillMaxWidth())
 
@@ -98,11 +119,14 @@ fun WorkOrderForm(dealerCode: String, onCreated: () -> Unit) {
             onClick = {
                 saving = true
                 val now = nowMs()
-                val customerId = WebRepositories.newId()
-                WebRepositories.saveCustomer(
-                    dealerCode,
-                    Customer(id = customerId, name = name, phone = phone, address = address, createdAtMillis = now, updatedAtMillis = now),
-                )
+                // 기존 고객 선택 시 그 id 재사용(중복 방지), 아니면 새 고객 생성.
+                val customerId = selectedCustomerId ?: WebRepositories.newId()
+                if (selectedCustomerId == null) {
+                    WebRepositories.saveCustomer(
+                        dealerCode,
+                        Customer(id = customerId, name = name, phone = phone, address = address, createdAtMillis = now, updatedAtMillis = now),
+                    )
+                }
                 val woId = WebRepositories.newId()
                 val assigned = engineerUid != null
                 WebRepositories.saveWorkOrder(
