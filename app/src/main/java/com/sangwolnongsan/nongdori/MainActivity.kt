@@ -126,8 +126,10 @@ private fun AppRoot() {
             onSignOut = { scope.launch { AppContainer.userManager.signOut(); dealerCode = null } },
         )
 
-        else -> HomePlaceholder(
+        else -> com.sangwolnongsan.nongdori.ui.screens.EngineerHome(
             dealerCode = dealerCode!!,
+            uid = user!!.uid,
+            engineerName = user!!.displayName ?: user!!.email ?: "",
             onSignOut = { scope.launch { AppContainer.userManager.signOut(); dealerCode = null } },
         )
     }
@@ -151,29 +153,3 @@ private fun ConfigNeeded() {
     }
 }
 
-@Composable
-private fun HomePlaceholder(dealerCode: String, onSignOut: () -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text("농돌이", style = MaterialTheme.typography.headlineLarge)
-        Text(
-            "대리점 코드: $dealerCode",
-            style = MaterialTheme.typography.bodyMedium,
-            color = TextSecondary,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-        Text(
-            "출장 목록 / 수리 입력 화면은 다음 단계에서 추가됩니다.",
-            style = MaterialTheme.typography.bodySmall,
-            color = TextSecondary,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 16.dp),
-        )
-        TextButton(onClick = onSignOut, modifier = Modifier.padding(top = 24.dp)) {
-            Text("로그아웃", color = TextSecondary)
-        }
-    }
-}
