@@ -59,6 +59,6 @@ push 시 GitHub Actions(`.github/workflows/build.yml`)가 양 모듈 컴파일�
 - [x] **3. 레포지토리 (웹)** — WorkOrder/Customer/Member (window.nongdori JSON 브리지 + kotlinx.serialization)
 - [x] **4. 웹 출장 생성 → 배차 보드** — 출장 생성 폼(고객+기계+증상+우선순위+엔지니어 배정) + RepairStatus 칸반 보드(상태 전진)
 - [x] **5. Android 엔지니어 — 출장 목록/상세/수리 입력** (배정 출장 목록, 고객 전화/길찾기, 상태 진행, 수리 입력→완료)
-- [ ] **6. 수리 이력 + CSV export**
+- [x] **6. 수리 이력 + CSV export** (웹 디스패처 ‘수리 이력’ 탭: 완료 출장 목록·금액 + CSV 내보내기)
 - [ ] **7. 엔지니어 라이브 위치 / ETA**
 - [ ] **8. 재고관리 (PHASE 2)**

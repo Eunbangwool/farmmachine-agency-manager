@@ -71,10 +71,12 @@ fun DispatcherHome(dealerCode: String, onSignOut: () -> Unit) {
         TabRow(selectedTabIndex = tab) {
             Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("배차 보드") })
             Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("출장 생성") })
+            Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("수리 이력") })
         }
         when (tab) {
             0 -> DispatchBoard(dealerCode, workOrders)
-            else -> WorkOrderForm(dealerCode, onCreated = { tab = 0 })
+            1 -> WorkOrderForm(dealerCode, onCreated = { tab = 0 })
+            else -> RepairHistoryView(workOrders)
         }
     }
 }
