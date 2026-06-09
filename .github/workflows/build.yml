@@ -1,9 +1,12 @@
 # ===================================================================
-# 농돌이 (대리점 앱) — 컴파일/빌드 검증 CI
+# 농돌이 (대리점 앱) — 빌드 + GitHub Releases 자동 업로드
 # ===================================================================
-# push/PR 마다 :app(Android 디버그 APK) 와 :web(WASM 번들) 을 빌드해
-# 컴파일을 검증한다. (로컬에 Android SDK 가 없어 CI 로 검증.)
+# push (main / claude/**)      → APK + 웹 번들 빌드 후 Release 에 업로드
+#   - main        : tag=latest        (Nongdori.apk),        정식
+#   - claude/**   : tag=latest-debug  (Nongdori-debug.apk),  prerelease
+# pull_request                 → 빌드 컴파일 검증만 (릴리즈 업로드 X)
 #
+# 로컬에 Android SDK 가 없어 빌드 검증은 CI 에서 한다.
 # Firebase 설정(google-services.json) 전에도 빌드되도록 google-services
 # 플러그인은 app/build.gradle.kts 에서 조건부 적용된다.
 
@@ -16,69 +19,85 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  android:
-    name: Build Android (:app)
+  build:
+    name: Build APK + Web
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: JDK 21 설정
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-      - uses: gradle/actions/setup-gradle@v4
-      - run: chmod +x gradlew
-      - name: assembleDebug
-        run: |
-          set -o pipefail
-          ./gradlew :app:assembleDebug -PdebugBuild=true --no-configuration-cache 2>&1 | tee android-build.log
-      - name: 빌드 로그 요약
-        if: always()
-        run: |
-          echo '## Android build log (tail 200)' >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          tail -200 android-build.log >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: android-build-log
-          path: android-build.log
-          retention-days: 14
 
-  web:
-    name: Build Web (:web)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
       - name: JDK 21 설정
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
+
       - uses: gradle/actions/setup-gradle@v4
       - run: chmod +x gradlew
-      - name: web WASM 번들 빌드
+
+      - name: 빌드 변형 결정
+        id: meta
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "tag=latest" >> $GITHUB_OUTPUT
+            echo "apk=Nongdori.apk" >> $GITHUB_OUTPUT
+            echo "debug_flag=" >> $GITHUB_OUTPUT
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+            echo "title=📱 최신 빌드 (운영)" >> $GITHUB_OUTPUT
+          else
+            echo "tag=latest-debug" >> $GITHUB_OUTPUT
+            echo "apk=Nongdori-debug.apk" >> $GITHUB_OUTPUT
+            echo "debug_flag=-PdebugBuild=true" >> $GITHUB_OUTPUT
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+            echo "title=🧪 최신 디버그 빌드" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Android APK 빌드
         run: |
           set -o pipefail
-          ./gradlew :web:wasmJsBrowserDistribution --no-configuration-cache 2>&1 | tee web-build.log
+          ./gradlew :app:assembleDebug ${{ steps.meta.outputs.debug_flag }} 2>&1 | tee android-build.log
+          cp app/build/outputs/apk/debug/app-debug.apk "${{ steps.meta.outputs.apk }}"
+
+      - name: 웹 번들 빌드
+        run: |
+          set -o pipefail
+          ./gradlew :web:wasmJsBrowserDistribution 2>&1 | tee web-build.log
+
+      - name: 웹 번들 zip
+        run: |
+          DIST=$(find web/build/dist -type d -name productionExecutable | head -1)
+          if [ -z "$DIST" ]; then DIST=$(find web/build -type d -path '*wasmJs*' -name '*xecutable*' | head -1); fi
+          echo "web dist: $DIST"
+          (cd "$DIST" && zip -r "$GITHUB_WORKSPACE/nongdori-web.zip" .)
+
       - name: 빌드 로그 요약
         if: always()
         run: |
-          echo '## Web build log (tail 200)' >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          tail -200 web-build.log >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-      - uses: actions/upload-artifact@v4
-        if: always()
+          echo '## Android log (tail 100)' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY; tail -100 android-build.log >> $GITHUB_STEP_SUMMARY; echo '```' >> $GITHUB_STEP_SUMMARY
+          echo '## Web log (tail 100)' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY; tail -100 web-build.log >> $GITHUB_STEP_SUMMARY; echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Release 업로드 (push 만)
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
         with:
-          name: web-build-log
-          path: web-build.log
-          retention-days: 14
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.title }}
+          prerelease: ${{ steps.meta.outputs.prerelease }}
+          files: |
+            ${{ steps.meta.outputs.apk }}
+            nongdori-web.zip
+          body: |
+            **농돌이 자동 빌드** (`${{ github.sha }}`)
+
+            - Android: `${{ steps.meta.outputs.apk }}` (debug keystore 서명 — 폰에서 바로 설치)
+            - Web: `nongdori-web.zip` (정적 호스팅에 압축 해제하여 배포)
+
+            ⚠️ 실제 동작에는 Firebase 설정이 필요합니다 (README 참고).
