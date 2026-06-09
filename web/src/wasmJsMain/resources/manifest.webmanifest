@@ -1,0 +1,20 @@
+{
+  "name": "농돌이 - 농기계 대리점 출장·수리 관리",
+  "short_name": "농돌이",
+  "description": "농기계 대리점용 출장 배정, 수리 진행/이력, 재고 관리. 사무실 디스패처와 현장 엔지니어를 잇는다.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#2A2826",
+  "theme_color": "#2A2826",
+  "orientation": "portrait",
+  "lang": "ko-KR",
+  "categories": ["productivity", "business", "agriculture"],
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon"
+    }
+  ]
+}

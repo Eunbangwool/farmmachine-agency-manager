@@ -1,0 +1,115 @@
+rules_version = '2';
+
+// ===================================================================
+// 농돌이 (농기계 대리점 앱) — Firestore 보안 규칙
+//
+// 이 앱은 farm-work-manager / farm-machine-manager 와 *별개* Firebase
+// 프로젝트를 사용한다. 따라서 farms/{farmCode} 구조와 무관하며, 보호된
+// machines/maintenance/consumables 규칙과도 충돌하지 않는다.
+//
+// 핵심 모델:
+//  1. 모든 접근은 Firebase Auth 로그인 필수.
+//  2. dealerships/{code}/** 접근은 dealerships/{code}/members/{uid} 멤버 doc
+//     이 존재해야 가능 (대리점 코드 기반 멤버십).
+//  3. 멤버 생성 경로:
+//     a) 새 대리점 생성: dealership doc.ownerUid == 본인 → owner 멤버 자기 생성
+//     b) 초대(invitations/{email}) 를 받은 사용자가 self-join
+//     c) 기존 OWNER/ADMIN 이 다른 사용자를 멤버로 추가
+//  4. 멤버 관리(추가/역할변경/삭제) 는 OWNER/ADMIN 만.
+// ===================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─────── collection group: 본인 멤버 doc 자동 발견 ───────
+    // 앱 재설치/웹 재접속 시 내가 속한 대리점을 찾기 위한 collectionGroup("members").
+    match /{path=**}/members/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // ─────── helpers ───────
+    function isAuthed() {
+      return request.auth != null;
+    }
+    function memberPath(code) {
+      return /databases/$(database)/documents/dealerships/$(code)/members/$(request.auth.uid);
+    }
+    function isMember(code) {
+      return isAuthed() && exists(memberPath(code));
+    }
+    function myRole(code) {
+      return get(memberPath(code)).data.role;
+    }
+    function isManager(code) {
+      return isMember(code) && (myRole(code) == "OWNER" || myRole(code) == "ADMIN");
+    }
+    function isOwner(code) {
+      return isMember(code) && myRole(code) == "OWNER";
+    }
+
+    match /dealerships/{code} {
+      // 대리점 doc: 멤버는 읽기. 생성은 본인이 ownerUid 일 때(새 대리점 부트스트랩).
+      allow read: if isMember(code);
+      allow create: if isAuthed() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isOwner(code);
+      allow delete: if isOwner(code);
+
+      // ── 멤버 ──
+      match /members/{uid} {
+        allow read: if isMember(code);
+        // owner 자기 생성(부트스트랩) | 초대 수락 self-join | 관리자가 추가
+        allow create: if isAuthed() && (
+          (uid == request.auth.uid && get(/databases/$(database)/documents/dealerships/$(code)).data.ownerUid == request.auth.uid) ||
+          (uid == request.auth.uid && exists(/databases/$(database)/documents/dealerships/$(code)/invitations/$(request.auth.token.email))) ||
+          isManager(code)
+        );
+        allow update: if isManager(code) || (uid == request.auth.uid);
+        allow delete: if isManager(code) || (uid == request.auth.uid);
+      }
+
+      // ── 가입 요청 ──
+      match /joinRequests/{uid} {
+        allow read: if isManager(code) || uid == request.auth.uid;
+        allow create: if isAuthed() && uid == request.auth.uid;
+        allow update, delete: if isManager(code) || uid == request.auth.uid;
+      }
+
+      // ── 초대 (이메일 기준) ──
+      match /invitations/{email} {
+        allow read: if isMember(code) || (isAuthed() && email == request.auth.token.email);
+        allow create, update, delete: if isManager(code);
+      }
+
+      // ── 고객 ──
+      match /customers/{customerId} {
+        allow read: if isMember(code);
+        allow create, update: if isMember(code);
+        allow delete: if isManager(code);
+      }
+
+      // ── 고객 보유 기계 ──
+      match /machines/{machineId} {
+        allow read: if isMember(code);
+        allow create, update: if isMember(code);
+        allow delete: if isManager(code);
+      }
+
+      // ── 출장(작업지시) / 수리 ──
+      // 엔지니어(MEMBER) 도 배정된 출장 상태 갱신·수리 입력 가능하므로 멤버 전체 R/W.
+      match /workOrders/{workOrderId} {
+        allow read: if isMember(code);
+        allow create, update: if isMember(code);
+        allow delete: if isManager(code);
+      }
+
+      // ── 엔지니어 라이브 위치 ──
+      // 본인만 쓰기, 멤버는 읽기 (디스패처 위치 추적).
+      match /liveLocations/{uid} {
+        allow read: if isMember(code);
+        allow write: if isAuthed() && uid == request.auth.uid;
+      }
+
+      // ── parts/{partId} (재고관리) — PHASE 2. 현재 규칙 미정의 = 접근 차단. ──
+    }
+  }
+}

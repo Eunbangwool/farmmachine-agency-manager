@@ -1,0 +1,3 @@
+<resources>
+    <!-- app_name 은 build.gradle.kts 의 resValue() 가 주입 ("농돌이" / "농돌이 디버그"). -->
+</resources>

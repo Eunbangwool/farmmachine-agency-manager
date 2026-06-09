@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 트랙터 본체: 캐빈 + 창문 컷아웃 + 후드 + 섀시 + 바퀴 외곽 + 바퀴 림.
+         evenOdd 채우기로 창문과 바퀴 림을 구멍 처리. -->
+    <path
+        android:fillColor="#3C3489"
+        android:fillType="evenOdd"
+        android:pathData="M28,40 L50,40 L53,60 L25,60 Z M32,44 L47,44 L49,56 L29,56 Z M50,52 L82,52 L82,70 L50,70 Z M22,66 L84,66 L84,76 L22,76 Z M22,80 a14,14 0 1,0 28,0 a14,14 0 1,0 -28,0 Z M28,80 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0 Z M64,84 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0 Z M68,84 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0 Z" />
+
+    <!-- 바퀴 중앙 허브 -->
+    <path
+        android:fillColor="#3C3489"
+        android:pathData="M33,80 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0 M72,84 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" />
+
+</vector>

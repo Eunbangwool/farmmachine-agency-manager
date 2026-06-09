@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>농돌이 — 농기계 대리점 출장·수리 관리</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#2A2826">
+    <link rel="preload" as="script" href="nongdori-web.js">
+    <style>
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #FAF9F4; }
+        #compose-target { width: 100%; height: 100%; }
+        #loading {
+            position: fixed; inset: 0; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 16px;
+            font-family: -apple-system, system-ui, sans-serif; color: #1F2421;
+            transition: opacity .3s ease;
+        }
+        #loading.hide { opacity: 0; }
+        .spinner {
+            width: 36px; height: 36px; border: 3px solid #DDD9CC; border-top-color: #555350;
+            border-radius: 50%; animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <div class="spinner"></div>
+        <div>농돌이 불러오는 중…</div>
+    </div>
+    <div id="compose-target"></div>
+
+    <!-- Compose Multiplatform WASM 번들 -->
+    <script src="nongdori-web.js"></script>
+
+    <script>
+        // 첫 Compose frame(compose-target 자식 추가) 시 로딩 스피너 숨김. 8초 안전 타임아웃.
+        function hideLoading() {
+            var el = document.getElementById("loading");
+            if (el) el.classList.add("hide");
+            setTimeout(function () { if (el && el.parentNode) el.parentNode.removeChild(el); }, 300);
+        }
+        var observer = new MutationObserver(function (mutations) {
+            for (var m of mutations) {
+                if (m.addedNodes.length > 0) { hideLoading(); observer.disconnect(); return; }
+            }
+        });
+        var target = document.getElementById("compose-target");
+        if (target) observer.observe(target, { childList: true, subtree: true });
+        setTimeout(hideLoading, 8000);
+    </script>
+</body>
+</html>
