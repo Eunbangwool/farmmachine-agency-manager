@@ -91,4 +91,4 @@ jobs:
           done
           echo "❌ 5회 재시도 실패"; exit 1
 
-# trigger: 첫 Pages 배포
+# trigger: Pages 배포 재시도 (토큰 권한 수정 후)
