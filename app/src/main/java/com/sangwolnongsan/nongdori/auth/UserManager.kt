@@ -14,6 +14,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.sangwolnongsan.nongdori.AppContainer
+import com.sangwolnongsan.nongdori.data.FirebaseAvailability
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,14 +30,17 @@ import kotlinx.coroutines.tasks.await
  */
 class UserManager(private val context: Context) {
 
-    private val auth: FirebaseAuth = FirebaseAuth.getInstance()
+    // Firebase 미설정(google-services.json 없이 빌드)이어도 앱이 튕기지 않도록 가드.
+    // FirebaseApp 미초기화 상태에서 getInstance() 를 호출하면 IllegalStateException → 시작 크래시.
+    private val auth: FirebaseAuth? =
+        if (FirebaseAvailability.isAvailable) FirebaseAuth.getInstance() else null
     private val credentialManager: CredentialManager = CredentialManager.create(context)
 
-    private val _currentUser = MutableStateFlow(auth.currentUser)
+    private val _currentUser = MutableStateFlow(auth?.currentUser)
     val currentUser: StateFlow<FirebaseUser?> = _currentUser.asStateFlow()
 
     init {
-        auth.addAuthStateListener { firebaseAuth ->
+        auth?.addAuthStateListener { firebaseAuth ->
             _currentUser.value = firebaseAuth.currentUser
             Log.d(TAG, "Auth 상태 변경: ${firebaseAuth.currentUser?.email}")
         }
@@ -46,6 +50,9 @@ class UserManager(private val context: Context) {
      * Google 로그인. 1) 빠른 one-tap → 2) 실패 시 정식 sign-in flow.
      */
     suspend fun signInWithGoogle(webClientId: String): Result<FirebaseUser> {
+        if (auth == null) {
+            return Result.failure(IllegalStateException("Firebase 가 설정되지 않았습니다 (google-services.json 필요)"))
+        }
         val quickRequest = GetCredentialRequest.Builder()
             .addCredentialOption(
                 GetGoogleIdOption.Builder()
@@ -87,7 +94,8 @@ class UserManager(private val context: Context) {
         }
         val googleIdToken = GoogleIdTokenCredential.createFrom(credential.data).idToken
         val firebaseCredential = GoogleAuthProvider.getCredential(googleIdToken, null)
-        val authResult = auth.signInWithCredential(firebaseCredential).await()
+        val a = auth ?: return Result.failure(IllegalStateException("Firebase 미설정"))
+        val authResult = a.signInWithCredential(firebaseCredential).await()
         return authResult.user?.let {
             Log.d(TAG, "Firebase 로그인 성공: ${it.email}")
             Result.success(it)
@@ -96,7 +104,7 @@ class UserManager(private val context: Context) {
 
     /** 로그아웃 — Firebase + Credential Manager + 대리점 코드 정리. */
     suspend fun signOut() {
-        auth.signOut()
+        auth?.signOut()
         try {
             AppContainer.dealerCodeManager.clearCode()
         } catch (_: Exception) {}
