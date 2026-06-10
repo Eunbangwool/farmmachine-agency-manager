@@ -1,5 +1,9 @@
 {
-  "firestore": {
-    "rules": "firestore.rules"
+  "//": "agency repo 는 hosting 만 배포한다. firestore.rules 는 절대 여기서 배포 금지 (farm-work-manager 에서 배포). 충돌 방지 위해 전용 site 'nongdori' 사용.",
+  "hosting": {
+    "site": "nongdori",
+    "public": "public_web",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [{ "source": "**", "destination": "/index.html" }]
   }
 }
