@@ -22,12 +22,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,8 +43,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.google.firebase.firestore.FirebaseFirestore
+import com.sangwolnongsan.nongdori.data.DealershipMembership
 import com.sangwolnongsan.nongdori.data.WorkOrderRepository
+import com.sangwolnongsan.nongdori.shared.data.DealershipMember
 import com.sangwolnongsan.nongdori.shared.data.PartUsage
+import com.sangwolnongsan.nongdori.shared.data.Priority
 import com.sangwolnongsan.nongdori.shared.data.RepairRecord
 import com.sangwolnongsan.nongdori.shared.data.RepairStatus
 import com.sangwolnongsan.nongdori.shared.data.WorkOrder
@@ -52,9 +58,12 @@ import com.sangwolnongsan.nongdori.shared.ui.repairStatusColor
 import com.sangwolnongsan.nongdori.shared.ui.theme.BorderColor
 import com.sangwolnongsan.nongdori.shared.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import java.util.UUID
 
 /**
- * 엔지니어 홈 — 나에게 배정된 출장 목록 → 상세(고객정보/상태 진행/수리 입력).
+ * 홈 — OWNER/ADMIN(매니저)은 전체 출장 + '출장 생성'(디스패처 역할), 엔지니어는
+ * 나에게 배정된 출장만. 상세에서 고객정보/상태 진행/수리 입력.
  */
 @Composable
 fun EngineerHome(
@@ -64,9 +73,17 @@ fun EngineerHome(
     onSignOut: () -> Unit,
 ) {
     val repo = remember(dealerCode) { WorkOrderRepository(dealerCode) }
-    val flow = remember(dealerCode, uid) { repo.observeAssignedTo(uid) }
+    // 역할 확인 — OWNER/ADMIN 이면 디스패처(전체 출장 + 생성) 모드.
+    var isManager by remember(dealerCode) { mutableStateOf(false) }
+    LaunchedEffect(dealerCode, uid) {
+        isManager = runCatching { DealershipMembership.myRole(dealerCode)?.canDispatch == true }.getOrDefault(false)
+    }
+    val flow = remember(dealerCode, uid, isManager) {
+        if (isManager) repo.observeAll() else repo.observeAssignedTo(uid)
+    }
     val workOrders by flow.collectAsState(initial = emptyList())
     var selectedId by remember { mutableStateOf<String?>(null) }
+    var creating by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     val selected = workOrders.firstOrNull { it.id == selectedId }
@@ -79,19 +96,29 @@ fun EngineerHome(
         )
         return
     }
+    if (creating) {
+        CreateWorkOrderScreen(dealerCode, uid, engineerName, onDone = { creating = false })
+        return
+    }
 
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("오늘 출장", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(if (isManager) "출장 관리" else "오늘 출장", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
+            if (isManager) {
+                TextButton(onClick = { creating = true }) { Text("+ 출장 생성") }
+            }
             TextButton(onClick = onSignOut) { Text("로그아웃", color = TextSecondary) }
         }
         if (workOrders.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("배정된 출장이 없습니다.", color = TextSecondary)
+                Text(
+                    if (isManager) "출장이 없습니다. ‘+ 출장 생성’ 으로 추가하세요." else "배정된 출장이 없습니다.",
+                    color = TextSecondary,
+                )
             }
         } else {
             Column(
@@ -102,6 +129,109 @@ fun EngineerHome(
                 Spacer(Modifier.height(16.dp))
             }
         }
+    }
+}
+
+/**
+ * 출장 생성 (매니저 전용) — 고객/기계/증상 + 담당 엔지니어 배정.
+ * 고객 doc + 출장 doc 을 함께 생성. 배정 기본값은 본인(혼자 운영 대응).
+ */
+@Composable
+private fun CreateWorkOrderScreen(
+    dealerCode: String,
+    myUid: String,
+    myName: String,
+    onDone: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var name by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
+    var address by remember { mutableStateOf("") }
+    var machine by remember { mutableStateOf("") }
+    var symptom by remember { mutableStateOf("") }
+    var urgent by remember { mutableStateOf(false) }
+    var members by remember { mutableStateOf<List<DealershipMember>>(emptyList()) }
+    var assignUid by remember { mutableStateOf(myUid) }
+    var assignName by remember { mutableStateOf(myName) }
+    var saving by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(dealerCode) {
+        DealershipMembership.observeMembers(dealerCode).collect { members = it }
+    }
+
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        TextButton(onClick = onDone) { Text("← 취소") }
+        Text("새 출장", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+
+        Text("고객", color = TextSecondary, style = MaterialTheme.typography.labelLarge)
+        OutlinedTextField(name, { name = it }, label = { Text("고객 이름") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(phone, { phone = it }, label = { Text("연락처") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(address, { address = it }, label = { Text("주소") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+
+        Text("기계 / 증상", color = TextSecondary, style = MaterialTheme.typography.labelLarge)
+        OutlinedTextField(machine, { machine = it }, label = { Text("기계 (모델/종류)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(symptom, { symptom = it }, label = { Text("고장 증상") }, modifier = Modifier.fillMaxWidth())
+
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("우선순위:")
+            FilterChip(selected = !urgent, onClick = { urgent = false }, label = { Text(Priority.NORMAL.displayName) })
+            FilterChip(selected = urgent, onClick = { urgent = true }, label = { Text(Priority.URGENT.displayName) })
+        }
+
+        Text("담당 엔지니어", color = TextSecondary, style = MaterialTheme.typography.labelLarge)
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            members.forEach { m ->
+                val label = m.displayName.ifBlank { m.email }.ifBlank { m.uid } + if (m.uid == myUid) " (나)" else ""
+                FilterChip(
+                    selected = assignUid == m.uid,
+                    onClick = { assignUid = m.uid; assignName = m.displayName.ifBlank { m.email } },
+                    label = { Text(label) },
+                )
+            }
+        }
+
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+
+        Button(
+            onClick = {
+                saving = true; error = null
+                scope.launch {
+                    val ok = runCatching {
+                        val now = now()
+                        val customerId = UUID.randomUUID().toString()
+                        val db = FirebaseFirestore.getInstance()
+                            .collection("dealerships").document(dealerCode)
+                        db.collection("customers").document(customerId).set(
+                            mapOf(
+                                "id" to customerId, "name" to name, "phone" to phone,
+                                "address" to address, "createdAtMillis" to now, "updatedAtMillis" to now,
+                            )
+                        ).await()
+                        val wo = WorkOrder(
+                            id = UUID.randomUUID().toString(),
+                            orderNo = (1000..9999).random().toString(),
+                            customerId = customerId,
+                            customerName = name, customerPhone = phone, customerAddress = address,
+                            machineName = machine, symptom = symptom,
+                            priority = if (urgent) Priority.URGENT else Priority.NORMAL,
+                            status = RepairStatus.SCHEDULED,
+                            assignedEngineerUid = assignUid, assignedEngineerName = assignName,
+                            requestedAtMillis = now, scheduledAtMillis = now,
+                            createdByUid = myUid, createdAtMillis = now, updatedAtMillis = now,
+                        )
+                        WorkOrderRepository(dealerCode).save(wo)
+                    }
+                    saving = false
+                    if (ok.isSuccess) onDone() else error = "생성 실패: ${ok.exceptionOrNull()?.message}"
+                }
+            },
+            enabled = !saving && name.isNotBlank(),
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(if (saving) "저장 중…" else "출장 생성") }
     }
 }
 
