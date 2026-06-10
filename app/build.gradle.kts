@@ -23,7 +23,9 @@ val googleWebClientId: String = (project.findProperty("GOOGLE_WEB_CLIENT_ID") as
         if (f.exists()) f.inputStream().use { load(it) }
     }.getProperty("GOOGLE_WEB_CLIENT_ID", "")
 
-// `-PdebugBuild=true` 로 빌드하면 운영 앱과 별개로 동시 설치 가능 (.debug suffix + "농돌이 디버그" 라벨).
+// `-PdebugBuild=true` 로 빌드하면 라벨("농돌이 디버그")·versionName(-debug) 만 구분.
+// applicationId 는 Firebase 등록 패키지(com.sanwolnongsan.farmmachineagency) 와
+// 일치해야 google-services 가 매칭되므로 .debug suffix 는 붙이지 않는다.
 val debugBuild: Boolean = (project.findProperty("debugBuild") as? String)?.toBoolean() ?: false
 
 android {
@@ -35,7 +37,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.sangwolnongsan.nongdori"
+        applicationId = "com.sanwolnongsan.farmmachineagency"
         minSdk = 24
         targetSdk = 36
         versionCode = ciRunNumber
@@ -79,7 +81,6 @@ android {
         debug {
             signingConfig = signingConfigs.getByName("debug")
             if (debugBuild) {
-                applicationIdSuffix = ".debug"
                 versionNameSuffix = "-debug"
                 resValue("string", "app_name", "농돌이 디버그")
             }
@@ -92,7 +93,6 @@ android {
                 "proguard-rules.pro"
             )
             if (debugBuild) {
-                applicationIdSuffix = ".debug"
                 versionNameSuffix = "-debug"
                 resValue("string", "app_name", "농돌이 디버그")
             }

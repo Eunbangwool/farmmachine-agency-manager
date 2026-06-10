@@ -58,10 +58,26 @@ jobs:
             echo "title=🧪 최신 디버그 빌드" >> $GITHUB_OUTPUT
           fi
 
+      # Firebase 설정은 git 에 두지 않고 Secret(base64) 에서 복원. Secret 없으면
+      # 파일 미생성 → google-services 플러그인 미적용 → Firebase 없이도 빌드됨.
+      - name: google-services.json 주입
+        env:
+          GS_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GS_JSON" ]; then
+            echo "$GS_JSON" | base64 -d > app/google-services.json
+            echo "google-services.json 주입됨 ($(wc -c < app/google-services.json) bytes)"
+          else
+            echo "GOOGLE_SERVICES_JSON secret 없음 — Firebase 비활성 빌드"
+          fi
+
       - name: Android APK 빌드
+        env:
+          GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
         run: |
           set -o pipefail
-          ./gradlew :app:assembleDebug ${{ steps.meta.outputs.debug_flag }} 2>&1 | tee android-build.log
+          ./gradlew :app:assembleDebug ${{ steps.meta.outputs.debug_flag }} \
+            -PGOOGLE_WEB_CLIENT_ID="${GOOGLE_WEB_CLIENT_ID:-}" 2>&1 | tee android-build.log
           cp app/build/outputs/apk/debug/app-debug.apk "${{ steps.meta.outputs.apk }}"
 
       - name: 웹 번들 빌드

@@ -7,7 +7,7 @@
 - **공통 도메인·디자인** → `:shared` (Kotlin Multiplatform)
 
 > 자매 앱: **농작이**(`farm-work-manager`, 농가용 농작업 관리), **농식이**(`farm-machine-manager`, 농기계 정비 관리).
-> 본 앱은 두 앱의 컨셉을 합쳐 *대리점* 관점으로 재구성했으며, **별개의 Firebase 프로젝트**를 사용한다.
+> 본 앱은 두 앱의 컨셉을 합쳐 *대리점* 관점으로 재구성했으며, Firebase 프로젝트는 `farm-machine-manager-prod` 를 공유한다(앱별 패키지로 분리).
 
 ## 4대 기능
 1. **출장관리** — 서비스콜(WorkOrder) 생성, 고객/기계 정보, 엔지니어 배정, 배차 보드, 라이브 위치/ETA
@@ -22,7 +22,7 @@
 :web      Compose/WASM 웹 (사무실 디스패처)
 ```
 기술 스택: Kotlin 2.2.20, AGP 9.2.1, Compose Multiplatform 1.10.3, Firebase(Auth + Firestore).
-패키지: `com.sangwolnongsan.nongdori`.
+Android applicationId(Firebase 등록 패키지): `com.sanwolnongsan.farmmachineagency` · 코드 네임스페이스: `com.sangwolnongsan.nongdori`.
 
 ## Firestore 데이터 모델
 ```
@@ -38,13 +38,19 @@ dealerships/{dealerCode}
 **수리 이력은 별도 컬렉션이 아니다** — `status == DONE` 인 WorkOrder 를 `customerId`/`machineId` 로 조회한다(FSM 표준).
 
 ## 최초 설정 (Firebase)
-이 저장소는 코드만 포함한다. 실행하려면 **새 Firebase 프로젝트**가 필요하다.
-1. [Firebase 콘솔](https://console.firebase.google.com)에서 새 프로젝트 생성 → Authentication(Google 공급자) + Firestore 활성화.
-2. **Android 앱 등록**: 패키지명 `com.sangwolnongsan.nongdori` → `google-services.json` 다운로드 → `app/google-services.json` 에 배치 (`.gitignore` 처리됨).
-3. **웹 앱 등록**: Firebase 웹 config 와 OAuth Web Client ID 발급.
-   - Android: `local.properties` 에 `GOOGLE_WEB_CLIENT_ID=...` 또는 CI Secret.
-   - Web: `web/.../index.html` 의 Firebase config (인증 단계에서 추가 예정).
-4. Firestore 규칙 배포: `firebase deploy --only firestore:rules`.
+Firebase 프로젝트 **`farm-machine-manager-prod`** 를 농작이·농식이와 공유한다(앱별 패키지로 분리).
+1. **Android 앱 등록**: 패키지명 `com.sanwolnongsan.farmmachineagency` → `google-services.json`
+   → `app/google-services.json` 에 배치 (`.gitignore` 처리됨, 저장소에 커밋 안 함).
+2. **CI Secret** (public 저장소이므로 자격증명은 git 에 두지 않고 Secret 주입):
+   - `GOOGLE_SERVICES_JSON` — `base64 -w0 app/google-services.json` 결과.
+   - `GOOGLE_WEB_CLIENT_ID` — OAuth Web Client ID
+     (`810632460995-r2t2uk3qb8kcp60uq2p25r6hht07ih1o.apps.googleusercontent.com`).
+   - 저장소 Settings → Secrets and variables → Actions → New repository secret.
+   - 로컬 빌드는 `local.properties` 에 `GOOGLE_WEB_CLIENT_ID=...`.
+3. **Google 로그인 SHA-1**(권장): debug.keystore 의 SHA-1 을 Firebase Android 앱에 등록
+   (Web Client ID idToken 방식이라 없어도 동작할 수 있으나 등록 권장).
+4. **웹 앱**: `web/.../index.html` 의 Firebase web config (웹 주소/도메인은 현 설정 유지).
+5. Firestore 규칙 배포: `firebase deploy --only firestore:rules`.
 5. (선택) 기사 위치 VWorld 지도: [VWorld](https://www.vworld.kr) API 키 발급 →
    `web/.../index.html` 의 `VWORLD_KEY` 와 `map/engineer_map.html` 의 기본 키(TODO) 교체.
 
