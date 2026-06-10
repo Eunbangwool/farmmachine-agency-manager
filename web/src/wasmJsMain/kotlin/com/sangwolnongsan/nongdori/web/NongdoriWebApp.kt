@@ -32,6 +32,7 @@ import com.sangwolnongsan.nongdori.shared.ui.theme.NongdoriTheme
 import com.sangwolnongsan.nongdori.shared.ui.theme.TextSecondary
 import com.sangwolnongsan.nongdori.web.firebase.AuthManager
 import com.sangwolnongsan.nongdori.web.firebase.WebDealershipMembership
+import com.sangwolnongsan.nongdori.web.theme.PretendardWrapper
 import kotlinx.coroutines.launch
 
 /**
@@ -41,9 +42,11 @@ import kotlinx.coroutines.launch
 @Composable
 fun NongdoriWebApp() {
     NongdoriTheme {
-        Scaffold { padding ->
-            Column(Modifier.fillMaxSize().padding(padding)) {
-                WebRoot()
+        PretendardWrapper {
+            Scaffold { padding ->
+                Column(Modifier.fillMaxSize().padding(padding)) {
+                    WebRoot()
+                }
             }
         }
     }
