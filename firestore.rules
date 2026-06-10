@@ -1,11 +1,19 @@
 rules_version = '2';
 
 // ===================================================================
-// 농돌이 (농기계 대리점 앱) — Firestore 보안 규칙
+// 농돌이 (농기계 대리점 앱) — Firestore 보안 규칙 (참고용 / dealerships 부분만)
 //
-// 이 앱은 farm-work-manager / farm-machine-manager 와 *별개* Firebase
-// 프로젝트를 사용한다. 따라서 farms/{farmCode} 구조와 무관하며, 보호된
-// machines/maintenance/consumables 규칙과도 충돌하지 않는다.
+// ⚠️ 절대 이 파일을 단독으로 `firebase deploy` 하지 말 것!
+//    이 앱은 farm-work-manager / farm-machine-manager 와 **같은** Firebase
+//    프로젝트(farm-machine-manager-prod)를 공유한다. 규칙은 파일 전체 단위로
+//    배포되므로, 이 파일(farms 블록 없음)을 배포하면 농작이/농식이 규칙이
+//    통째로 삭제된다.
+//
+// ✅ 실제 배포 원본(canonical)은 farm-work-manager/firestore.rules 다.
+//    그 파일에 dealerships/{code}/** 규칙이 dlr* 헬퍼와 함께 합쳐져 있으며,
+//    배포는 거기서 한다. 이 파일은 대리점 규칙 변경 시 참고/동기화용.
+//
+// (아래는 dealerships 규칙 부분만 — farms/machines/maintenance/consumables 없음)
 //
 // 핵심 모델:
 //  1. 모든 접근은 Firebase Auth 로그인 필수.
