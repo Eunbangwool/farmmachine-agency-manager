@@ -57,6 +57,7 @@ import com.sangwolnongsan.nongdori.shared.data.withStatus
 import com.sangwolnongsan.nongdori.shared.ui.repairStatusColor
 import com.sangwolnongsan.nongdori.shared.ui.theme.BorderColor
 import com.sangwolnongsan.nongdori.shared.ui.theme.TextSecondary
+import com.sangwolnongsan.nongdori.update.AppUpdateChecker
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
@@ -85,7 +86,18 @@ fun EngineerHome(
     var selectedId by remember { mutableStateOf<String?>(null) }
     var creating by remember { mutableStateOf(false) }
     var showCatalog by remember { mutableStateOf(false) }
+    // 앱 업데이트: null=닫힘, true=수동확인, false=자동(새 버전 발견 시 자동 표시)
+    var updateMode by remember { mutableStateOf<Boolean?>(null) }
     val scope = rememberCoroutineScope()
+
+    // 앱 시작 시 자동 업데이트 체크 — 새 버전이 있을 때만 다이얼로그 표시.
+    LaunchedEffect(Unit) {
+        val r = runCatching { AppUpdateChecker.checkForUpdate() }.getOrNull()
+        if (r is AppUpdateChecker.CheckResult.UpdateAvailable && updateMode == null) updateMode = false
+    }
+    updateMode?.let { manual ->
+        UpdateDialog(manual = manual, onDismiss = { updateMode = null })
+    }
 
     val selected = workOrders.firstOrNull { it.id == selectedId }
     if (selected != null) {
@@ -117,6 +129,7 @@ fun EngineerHome(
                 TextButton(onClick = { creating = true }) { Text("+ 출장 생성") }
             }
             TextButton(onClick = { showCatalog = true }) { Text("부품정보") }
+            TextButton(onClick = { updateMode = true }) { Text("업데이트") }
             TextButton(onClick = onSignOut) { Text("로그아웃", color = TextSecondary) }
         }
         if (workOrders.isEmpty()) {

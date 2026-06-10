@@ -131,5 +131,20 @@ service cloud.firestore {
         allow delete: if isManager(code);
       }
     }
+
+    // ─────── /app_meta/{docId} ───────
+    // 농돌이 앱 release 메타 (versionCode/downloadUrl) — 인앱 업데이트용.
+    // 배포본(canonical)은 farm-work-manager 의 동일 블록(3 repo URL 허용). 여기는 참고용.
+    match /app_meta/{docId} {
+      allow read: if true;
+      allow create: if isAuthed()
+        && request.resource.data.downloadUrl is string
+        && request.resource.data.downloadUrl.matches('https://github.com/Eunbangwool/(farm-work-manager|farm-machine-manager|farmmachine-agency-manager)/releases/download/.*');
+      allow update: if isAuthed()
+        && request.resource.data.versionCode is int
+        && request.resource.data.versionCode > resource.data.versionCode
+        && request.resource.data.downloadUrl is string
+        && request.resource.data.downloadUrl.matches('https://github.com/Eunbangwool/(farm-work-manager|farm-machine-manager|farmmachine-agency-manager)/releases/download/.*');
+    }
   }
 }

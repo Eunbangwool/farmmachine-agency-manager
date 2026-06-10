@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- DownloadManager가 저장하는 위치: getExternalFilesDir(Downloads) -->
+    <external-files-path
+        name="apk_downloads"
+        path="Download/" />
+</paths>

@@ -113,7 +113,13 @@ jobs:
           body: |
             **농돌이 자동 빌드** (`${{ github.sha }}`)
 
+            Build: ${{ github.run_number }}
+            versionCode=${{ github.run_number }}
+            versionName=0.1.${{ github.run_number }}
+
             - Android: `${{ steps.meta.outputs.apk }}` (debug keystore 서명 — 폰에서 바로 설치)
             - Web: `nongdori-web.zip` (정적 호스팅에 압축 해제하여 배포)
+
+            앱 내 '업데이트' 버튼이 이 `versionCode` 를 읽어 새 버전을 감지합니다.
 
             ⚠️ 실제 동작에는 Firebase 설정이 필요합니다 (README 참고).

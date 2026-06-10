@@ -40,6 +40,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AppContainer.init(applicationContext)
+        // 정기 자동 업데이트 체크 (WorkManager) — prefs 기준 schedule.
+        try {
+            com.sangwolnongsan.nongdori.update.UpdateCheckScheduler.syncFromPreferences(applicationContext)
+        } catch (e: Exception) {
+            android.util.Log.w("UpdateCheck", "schedule failed: ${e.message}")
+        }
         setContent {
             NongdoriTheme {
                 Scaffold { padding ->
