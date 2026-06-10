@@ -1,0 +1,92 @@
+# ===================================================================
+# 웹 디스패처 → www.sangwolnongsan.com/app/nongdori/ 자동 배포
+#
+# 농작이와 동일한 방식: GitHub Pages. 빌드 산출물을
+# farm-work-manager 저장소의 docs/app/nongdori/ 에 push 하면
+# (그 저장소 Pages 의 커스텀 도메인 www.sangwolnongsan.com 로) 서빙된다.
+#
+# 1회 설정: agency 저장소 Secret  FARMWORK_PAGES_TOKEN
+#   = farm-work-manager 에 contents:write 권한이 있는 PAT(fine-grained).
+#
+# 서브패스(/app/nongdori/) 서빙이라 web 은 상대경로 리소스를 쓴다(확인됨).
+# 접속은 끝에 / 붙여서: https://www.sangwolnongsan.com/app/nongdori/
+# ===================================================================
+
+name: Deploy Web (Pages)
+
+on:
+  push:
+    branches:
+      - main
+      - 'claude/**'
+    paths:
+      - 'web/**'
+      - 'shared/**'
+      - '.github/workflows/deploy-web-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-web-pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build + Deploy to Pages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - uses: gradle/actions/setup-gradle@v4
+      - run: chmod +x gradlew
+
+      - name: 웹 번들 빌드
+        run: ./gradlew :web:wasmJsBrowserDistribution
+
+      - name: farm-work-manager docs/app/nongdori/ 로 배포
+        env:
+          TOKEN: ${{ secrets.FARMWORK_PAGES_TOKEN }}
+        run: |
+          set -o pipefail
+          if [ -z "$TOKEN" ]; then
+            echo "❌ FARMWORK_PAGES_TOKEN secret 미설정 — farm-work-manager contents:write PAT 필요"
+            exit 1
+          fi
+          DIST=$(find web/build/dist -type d -name productionExecutable | head -1)
+          if [ -z "$DIST" ]; then echo "❌ 빌드 산출물 없음"; exit 1; fi
+          echo "dist: $DIST"
+
+          git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/Eunbangwool/farm-work-manager.git" /tmp/fw
+          cd /tmp/fw
+          rm -rf docs/app/nongdori
+          mkdir -p docs/app/nongdori
+          cp -r "$GITHUB_WORKSPACE/$DIST"/. docs/app/nongdori/
+          touch docs/.nojekyll
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/app/nongdori docs/.nojekyll
+          if git diff --staged --quiet; then
+            echo "변경 없음 - 스킵"; exit 0
+          fi
+          # [skip ci] 로 farm-work-manager 의 빌드 워크플로 재트리거 방지
+          git commit -m "🤖 농돌이 web 배포 → /app/nongdori/ (${GITHUB_SHA::7}) [skip ci]"
+
+          # main 이 앞서간 경우 rebase 후 재시도 (최대 5회).
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then
+              echo "✅ 배포 완료 → www.sangwolnongsan.com/app/nongdori/ (attempt=$attempt)"
+              exit 0
+            fi
+            echo "⚠ push 실패(attempt=$attempt) — rebase 후 재시도"
+            git pull --rebase origin main || { echo "❌ rebase 실패"; exit 1; }
+          done
+          echo "❌ 5회 재시도 실패"; exit 1
