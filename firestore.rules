@@ -123,6 +123,13 @@ service cloud.firestore {
         allow create, update: if isMember(code);
         allow delete: if isManager(code);
       }
+
+      // ── 기종별 부품 카탈로그 (참고용, 재고와 별개) ──
+      match /partCatalog/{entryId} {
+        allow read: if isMember(code);
+        allow create, update: if isMember(code);
+        allow delete: if isManager(code);
+      }
     }
   }
 }

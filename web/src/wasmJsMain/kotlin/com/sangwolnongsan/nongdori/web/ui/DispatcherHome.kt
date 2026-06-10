@@ -75,7 +75,8 @@ fun DispatcherHome(dealerCode: String, onSignOut: () -> Unit) {
             Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("고객") })
             Tab(selected = tab == 3, onClick = { tab = 3 }, text = { Text("기사 위치") })
             Tab(selected = tab == 4, onClick = { tab = 4 }, text = { Text("재고") })
-            Tab(selected = tab == 5, onClick = { tab = 5 }, text = { Text("수리 이력") })
+            Tab(selected = tab == 5, onClick = { tab = 5 }, text = { Text("기종별 부품정보") })
+            Tab(selected = tab == 6, onClick = { tab = 6 }, text = { Text("수리 이력") })
         }
         when (tab) {
             0 -> DispatchBoard(dealerCode, workOrders)
@@ -83,6 +84,7 @@ fun DispatcherHome(dealerCode: String, onSignOut: () -> Unit) {
             2 -> CustomerView(dealerCode, workOrders)
             3 -> EngineerLiveScreen(dealerCode, workOrders)
             4 -> InventoryView(dealerCode)
+            5 -> PartCatalogView(dealerCode)
             else -> RepairHistoryView(workOrders)
         }
     }

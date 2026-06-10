@@ -1,5 +1,6 @@
 package com.sangwolnongsan.nongdori.web.data
 
+import com.sangwolnongsan.nongdori.shared.data.CatalogPart
 import com.sangwolnongsan.nongdori.shared.data.Customer
 import com.sangwolnongsan.nongdori.shared.data.DealershipMember
 import com.sangwolnongsan.nongdori.shared.data.Part
@@ -69,6 +70,21 @@ object WebRepositories {
 
     fun deletePart(code: String, partId: String, onResult: (Boolean) -> Unit = {}) {
         jsDeleteDoc("dealerships/$code/parts/$partId") { onResult(it == "ok") }
+    }
+
+    // ── 기종별 부품 카탈로그 (참고용) ──
+    fun observePartCatalog(code: String, onUpdate: (List<CatalogPart>) -> Unit) {
+        jsObserveCollection("dealerships/$code/partCatalog") { arr ->
+            onUpdate(parseList(arr) { json.decodeFromString<List<CatalogPart>>(it) })
+        }
+    }
+
+    fun saveCatalogPart(code: String, entry: CatalogPart, onResult: (Boolean) -> Unit = {}) {
+        jsSetDoc("dealerships/$code/partCatalog/${entry.id}", json.encodeToString(entry)) { onResult(it == "ok") }
+    }
+
+    fun deleteCatalogPart(code: String, entryId: String, onResult: (Boolean) -> Unit = {}) {
+        jsDeleteDoc("dealerships/$code/partCatalog/$entryId") { onResult(it == "ok") }
     }
 
     // ── Members (엔지니어 배정 선택용) ──

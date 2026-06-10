@@ -1,6 +1,7 @@
 package com.sangwolnongsan.nongdori.data
 
 import com.google.firebase.firestore.DocumentSnapshot
+import com.sangwolnongsan.nongdori.shared.data.CatalogPart
 import com.sangwolnongsan.nongdori.shared.data.Customer
 import com.sangwolnongsan.nongdori.shared.data.MachineType
 import com.sangwolnongsan.nongdori.shared.data.MaintenanceType
@@ -141,6 +142,29 @@ object FirestoreMappers {
         "performedByUid" to r.performedByUid,
         "performedByName" to r.performedByName,
         "isInProgress" to r.isInProgress,
+    )
+
+    // ── 기종별 부품 카탈로그 ──
+    fun catalogPartFromDoc(doc: DocumentSnapshot): CatalogPart = CatalogPart(
+        id = doc.id,
+        machineType = enumOrNull<MachineType>(doc.getString("machineType")) ?: MachineType.OTHER,
+        customTypeName = doc.getString("customTypeName"),
+        modelName = doc.getString("modelName") ?: "",
+        partName = doc.getString("partName") ?: "",
+        partNumber = doc.getString("partNumber") ?: "",
+        note = doc.getString("note") ?: "",
+        unitPrice = numI(doc.get("unitPrice")),
+    )
+
+    fun catalogPartToMap(e: CatalogPart): Map<String, Any?> = mapOf(
+        "id" to e.id,
+        "machineType" to e.machineType.name,
+        "customTypeName" to e.customTypeName,
+        "modelName" to e.modelName,
+        "partName" to e.partName,
+        "partNumber" to e.partNumber,
+        "note" to e.note,
+        "unitPrice" to e.unitPrice,
     )
 
     private fun numD(v: Any?): Double? = (v as? Number)?.toDouble()

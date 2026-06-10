@@ -84,6 +84,7 @@ fun EngineerHome(
     val workOrders by flow.collectAsState(initial = emptyList())
     var selectedId by remember { mutableStateOf<String?>(null) }
     var creating by remember { mutableStateOf(false) }
+    var showCatalog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     val selected = workOrders.firstOrNull { it.id == selectedId }
@@ -100,6 +101,10 @@ fun EngineerHome(
         CreateWorkOrderScreen(dealerCode, uid, engineerName, onDone = { creating = false })
         return
     }
+    if (showCatalog) {
+        PartCatalogScreen(dealerCode, isManager = isManager, onBack = { showCatalog = false })
+        return
+    }
 
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -111,6 +116,7 @@ fun EngineerHome(
             if (isManager) {
                 TextButton(onClick = { creating = true }) { Text("+ 출장 생성") }
             }
+            TextButton(onClick = { showCatalog = true }) { Text("부품정보") }
             TextButton(onClick = onSignOut) { Text("로그아웃", color = TextSecondary) }
         }
         if (workOrders.isEmpty()) {
