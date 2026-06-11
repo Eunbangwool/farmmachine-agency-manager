@@ -10,6 +10,15 @@ fun WorkOrder.advanced(nowMillis: Long): WorkOrder {
     return withStatus(next, nowMillis)
 }
 
+/**
+ * 엔지니어 uid → 미완료(열린) 출장 수.
+ * 배정 폼의 '추천 엔지니어'(현재 가장 한가한 사람) 계산에 사용.
+ */
+fun openCountByEngineer(workOrders: List<WorkOrder>): Map<String, Int> =
+    workOrders.filter { it.isOpen && !it.assignedEngineerUid.isNullOrBlank() }
+        .groupingBy { it.assignedEngineerUid!! }
+        .eachCount()
+
 /** 특정 상태로 전환 + 타임스탬프 stamp. */
 fun WorkOrder.withStatus(target: RepairStatus, nowMillis: Long): WorkOrder = copy(
     status = target,

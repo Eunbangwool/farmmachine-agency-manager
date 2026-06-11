@@ -95,10 +95,17 @@
             },
             deleteDocByPath: (path) => deleteDoc(pathToRef(path)),
             observeCollection: (path, cb) => {
-                return onSnapshot(colRef(path), (snap) => {
+                // 같은 path 재구독 시 기존 리스너 해제 — 탭 전환으로 view 가 다시
+                // 마운트될 때마다 onSnapshot 이 누적되는 누수(중복 콜백 + read 과금) 방지.
+                window.nongdori._subs = window.nongdori._subs || {};
+                const prev = window.nongdori._subs[path];
+                if (prev) { try { prev(); } catch (e) {} }
+                const unsub = onSnapshot(colRef(path), (snap) => {
                     const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                     cb(JSON.stringify(arr));
                 }, (err) => { console.warn('observeCollection err', err); cb('[]'); });
+                window.nongdori._subs[path] = unsub;
+                return unsub;
             },
             findMyDealerships: async (cb) => {
                 try {

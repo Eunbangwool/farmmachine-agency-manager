@@ -31,7 +31,9 @@ import com.sangwolnongsan.nongdori.shared.data.DealershipMember
 import com.sangwolnongsan.nongdori.shared.data.Priority
 import com.sangwolnongsan.nongdori.shared.data.RepairStatus
 import com.sangwolnongsan.nongdori.shared.data.WorkOrder
+import com.sangwolnongsan.nongdori.shared.data.openCountByEngineer
 import com.sangwolnongsan.nongdori.shared.ui.theme.TextSecondary
+import com.sangwolnongsan.nongdori.shared.util.generateOrderNo
 import com.sangwolnongsan.nongdori.shared.util.nowMs
 import com.sangwolnongsan.nongdori.web.data.WebRepositories
 import com.sangwolnongsan.nongdori.web.firebase.jsCurrentUserUid
@@ -39,9 +41,10 @@ import com.sangwolnongsan.nongdori.web.firebase.jsCurrentUserUid
 /**
  * 출장 생성 폼 — 고객 정보 + 기계 + 증상 + 우선순위 + 엔지니어 배정.
  * 저장 시 고객 doc + WorkOrder doc 을 만든다(고객 정보는 WO 에 스냅샷).
+ * 엔지니어 칩에 미완료 건수를 보여주고 가장 한가한 사람에게 '추천' 표시.
  */
 @Composable
-fun WorkOrderForm(dealerCode: String, onCreated: () -> Unit) {
+fun WorkOrderForm(dealerCode: String, workOrders: List<WorkOrder>, onCreated: () -> Unit) {
     var name by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var address by remember { mutableStateOf("") }
@@ -100,15 +103,24 @@ fun WorkOrderForm(dealerCode: String, onCreated: () -> Unit) {
 
         if (members.isNotEmpty()) {
             Text("담당 엔지니어 (선택)", color = TextSecondary, style = MaterialTheme.typography.labelLarge)
+            // 미완료(열린) 출장 수가 가장 적은 멤버 = 추천 (동률이면 먼저 등록된 멤버).
+            val openCounts = openCountByEngineer(workOrders)
+            val recommendedUid = if (members.size > 1) members.minByOrNull { openCounts[it.uid] ?: 0 }?.uid else null
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 members.forEach { m ->
+                    val count = openCounts[m.uid] ?: 0
+                    val label = buildString {
+                        append(m.displayName.ifBlank { m.email })
+                        append(" · ").append(count).append("건")
+                        if (m.uid == recommendedUid) append(" ★추천")
+                    }
                     FilterChip(
                         selected = engineerUid == m.uid,
                         onClick = {
                             if (engineerUid == m.uid) { engineerUid = null; engineerName = "" }
                             else { engineerUid = m.uid; engineerName = m.displayName.ifBlank { m.email } }
                         },
-                        label = { Text(m.displayName.ifBlank { m.email }) },
+                        label = { Text(label) },
                         modifier = Modifier.selectable(selected = engineerUid == m.uid, onClick = {}),
                     )
                 }
@@ -133,7 +145,7 @@ fun WorkOrderForm(dealerCode: String, onCreated: () -> Unit) {
                     dealerCode,
                     WorkOrder(
                         id = woId,
-                        orderNo = (1000..9999).random().toString(),
+                        orderNo = generateOrderNo(now),
                         customerId = customerId,
                         customerName = name,
                         customerPhone = phone,

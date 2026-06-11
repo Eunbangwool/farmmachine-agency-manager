@@ -39,7 +39,8 @@ fun RepairHistoryView(workOrders: List<WorkOrder>) {
             Text("수리 이력 (${done.size})", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Box(Modifier.weight(1f))
             if (done.isNotEmpty()) {
-                Button(onClick = { jsDownloadTextFile("repair_history.csv", toCsv(done), "text/csv;charset=utf-8") }) {
+                // UTF-8 BOM — 없으면 한국어 Excel 이 cp949 로 열어 한글이 전부 깨진다.
+                Button(onClick = { jsDownloadTextFile("repair_history.csv", "\uFEFF" + toCsv(done), "text/csv;charset=utf-8") }) {
                     Text("CSV 내보내기")
                 }
             }

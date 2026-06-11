@@ -39,13 +39,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.sangwolnongsan.nongdori.data.DealershipMembership
+import com.sangwolnongsan.nongdori.data.FirestoreMappers
 import com.sangwolnongsan.nongdori.data.WorkOrderRepository
+import com.sangwolnongsan.nongdori.shared.data.Customer
 import com.sangwolnongsan.nongdori.shared.data.DealershipMember
 import com.sangwolnongsan.nongdori.shared.data.PartUsage
 import com.sangwolnongsan.nongdori.shared.data.Priority
@@ -53,10 +54,13 @@ import com.sangwolnongsan.nongdori.shared.data.RepairRecord
 import com.sangwolnongsan.nongdori.shared.data.RepairStatus
 import com.sangwolnongsan.nongdori.shared.data.WorkOrder
 import com.sangwolnongsan.nongdori.shared.data.advanced
+import com.sangwolnongsan.nongdori.shared.data.openCountByEngineer
 import com.sangwolnongsan.nongdori.shared.data.withStatus
 import com.sangwolnongsan.nongdori.shared.ui.repairStatusColor
-import com.sangwolnongsan.nongdori.shared.ui.theme.BorderColor
+import com.sangwolnongsan.nongdori.shared.ui.theme.PriorityUrgent
 import com.sangwolnongsan.nongdori.shared.ui.theme.TextSecondary
+import com.sangwolnongsan.nongdori.shared.util.formatDate
+import com.sangwolnongsan.nongdori.shared.util.generateOrderNo
 import com.sangwolnongsan.nongdori.update.AppUpdateChecker
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -90,13 +94,18 @@ fun EngineerHome(
     var updateMode by remember { mutableStateOf<Boolean?>(null) }
     val scope = rememberCoroutineScope()
 
+    var preloadedUpdate by remember { mutableStateOf<AppUpdateChecker.UpdateInfo?>(null) }
     // 앱 시작 시 자동 업데이트 체크 — 새 버전이 있을 때만 다이얼로그 표시.
     LaunchedEffect(Unit) {
         val r = runCatching { AppUpdateChecker.checkForUpdate() }.getOrNull()
-        if (r is AppUpdateChecker.CheckResult.UpdateAvailable && updateMode == null) updateMode = false
+        if (r is AppUpdateChecker.CheckResult.UpdateAvailable && updateMode == null) {
+            preloadedUpdate = r.info
+            updateMode = false
+        }
     }
     updateMode?.let { manual ->
-        UpdateDialog(manual = manual, onDismiss = { updateMode = null })
+        // 자동 표시일 땐 방금 체크한 결과 재사용 — 중복 네트워크 호출 방지.
+        UpdateDialog(manual = manual, preloaded = if (manual) null else preloadedUpdate, onDismiss = { updateMode = null })
     }
 
     val selected = workOrders.firstOrNull { it.id == selectedId }
@@ -110,7 +119,7 @@ fun EngineerHome(
         return
     }
     if (creating) {
-        CreateWorkOrderScreen(dealerCode, uid, engineerName, onDone = { creating = false })
+        CreateWorkOrderScreen(dealerCode, uid, engineerName, workOrders, onDone = { creating = false })
         return
     }
     if (showCatalog) {
@@ -140,11 +149,25 @@ fun EngineerHome(
                 )
             }
         } else {
+            // 진행 중(긴급 우선 → 최신 요청 순) / 완료 를 섹션으로 분리.
+            val open = workOrders.filter { it.status.isOpen }.sortedWith(
+                compareByDescending<WorkOrder> { it.priority == Priority.URGENT }
+                    .thenByDescending { it.requestedAtMillis }
+            )
+            val closed = workOrders.filter { !it.status.isOpen }
+                .sortedByDescending { it.completedAtMillis ?: it.updatedAtMillis }
             Column(
                 Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                workOrders.forEach { wo -> WorkOrderListItem(wo) { selectedId = wo.id } }
+                if (open.isNotEmpty()) {
+                    Text("진행 중 (${open.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = TextSecondary)
+                    open.forEach { wo -> WorkOrderListItem(wo) { selectedId = wo.id } }
+                }
+                if (closed.isNotEmpty()) {
+                    Text("완료·취소 (${closed.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = TextSecondary, modifier = Modifier.padding(top = 6.dp))
+                    closed.forEach { wo -> WorkOrderListItem(wo) { selectedId = wo.id } }
+                }
                 Spacer(Modifier.height(16.dp))
             }
         }
@@ -160,6 +183,7 @@ private fun CreateWorkOrderScreen(
     dealerCode: String,
     myUid: String,
     myName: String,
+    workOrders: List<WorkOrder>,
     onDone: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -174,7 +198,17 @@ private fun CreateWorkOrderScreen(
     var assignName by remember { mutableStateOf(myName) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // 기존 고객 매칭 — 같은 고객을 매번 새로 만들지 않도록 (웹 폼과 동일 동작).
+    var customers by remember { mutableStateOf<List<Customer>>(emptyList()) }
+    var selectedCustomerId by remember { mutableStateOf<String?>(null) }
 
+    LaunchedEffect(dealerCode) {
+        customers = runCatching {
+            FirebaseFirestore.getInstance().collection("dealerships").document(dealerCode)
+                .collection("customers").get().await()
+                .documents.map { FirestoreMappers.customerFromDoc(it) }
+        }.getOrDefault(emptyList())
+    }
     LaunchedEffect(dealerCode) {
         DealershipMembership.observeMembers(dealerCode).collect { members = it }
     }
@@ -187,7 +221,18 @@ private fun CreateWorkOrderScreen(
         Text("새 출장", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
 
         Text("고객", color = TextSecondary, style = MaterialTheme.typography.labelLarge)
-        OutlinedTextField(name, { name = it }, label = { Text("고객 이름") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(name, { name = it; selectedCustomerId = null }, label = { Text("고객 이름") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        if (selectedCustomerId == null && name.isNotBlank()) {
+            customers.filter { it.name.contains(name, true) || it.phone.contains(name) }.take(5).forEach { c ->
+                Text(
+                    "기존 고객 선택: ${c.name}${if (c.phone.isNotBlank()) " · ${c.phone}" else ""}",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        selectedCustomerId = c.id; name = c.name; phone = c.phone; address = c.address
+                    }.padding(vertical = 4.dp),
+                )
+            }
+        }
         OutlinedTextField(phone, { phone = it }, label = { Text("연락처") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(address, { address = it }, label = { Text("주소") }, singleLine = true, modifier = Modifier.fillMaxWidth())
 
@@ -202,9 +247,17 @@ private fun CreateWorkOrderScreen(
         }
 
         Text("담당 엔지니어", color = TextSecondary, style = MaterialTheme.typography.labelLarge)
+        // 미완료(열린) 출장 수가 가장 적은 멤버 = 추천 (동률이면 먼저 등록된 멤버).
+        val openCounts = openCountByEngineer(workOrders)
+        val recommendedUid = if (members.size > 1) members.minByOrNull { openCounts[it.uid] ?: 0 }?.uid else null
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             members.forEach { m ->
-                val label = m.displayName.ifBlank { m.email }.ifBlank { m.uid } + if (m.uid == myUid) " (나)" else ""
+                val label = buildString {
+                    append(m.displayName.ifBlank { m.email }.ifBlank { m.uid })
+                    if (m.uid == myUid) append(" (나)")
+                    append(" · ").append(openCounts[m.uid] ?: 0).append("건")
+                    if (m.uid == recommendedUid) append(" ★추천")
+                }
                 FilterChip(
                     selected = assignUid == m.uid,
                     onClick = { assignUid = m.uid; assignName = m.displayName.ifBlank { m.email } },
@@ -221,18 +274,21 @@ private fun CreateWorkOrderScreen(
                 scope.launch {
                     val ok = runCatching {
                         val now = now()
-                        val customerId = UUID.randomUUID().toString()
-                        val db = FirebaseFirestore.getInstance()
-                            .collection("dealerships").document(dealerCode)
-                        db.collection("customers").document(customerId).set(
-                            mapOf(
-                                "id" to customerId, "name" to name, "phone" to phone,
-                                "address" to address, "createdAtMillis" to now, "updatedAtMillis" to now,
-                            )
-                        ).await()
+                        // 기존 고객을 선택했으면 재사용 (중복 고객 doc 생성 방지).
+                        val customerId = selectedCustomerId ?: UUID.randomUUID().toString()
+                        if (selectedCustomerId == null) {
+                            FirebaseFirestore.getInstance()
+                                .collection("dealerships").document(dealerCode)
+                                .collection("customers").document(customerId).set(
+                                    mapOf(
+                                        "id" to customerId, "name" to name, "phone" to phone,
+                                        "address" to address, "createdAtMillis" to now, "updatedAtMillis" to now,
+                                    )
+                                ).await()
+                        }
                         val wo = WorkOrder(
                             id = UUID.randomUUID().toString(),
-                            orderNo = (1000..9999).random().toString(),
+                            orderNo = generateOrderNo(now),
                             customerId = customerId,
                             customerName = name, customerPhone = phone, customerAddress = address,
                             machineName = machine, symptom = symptom,
@@ -256,13 +312,26 @@ private fun CreateWorkOrderScreen(
 
 @Composable
 private fun WorkOrderListItem(wo: WorkOrder, onClick: () -> Unit) {
+    val urgent = wo.priority == Priority.URGENT && wo.status.isOpen
     Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.width(10.dp).height(10.dp).clip(RoundedCornerShape(5.dp)).background(repairStatusColor(wo.status)))
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(wo.customerName.ifBlank { "(고객 미상)" }, fontWeight = FontWeight.SemiBold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (urgent) {
+                        Text("긴급", color = PriorityUrgent, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    Text(wo.customerName.ifBlank { "(고객 미상)" }, fontWeight = FontWeight.SemiBold)
+                }
                 if (wo.symptom.isNotBlank()) Text(wo.symptom, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                val sub = buildString {
+                    val d = formatDate(if (wo.status.isOpen) wo.requestedAtMillis else (wo.completedAtMillis ?: wo.requestedAtMillis))
+                    if (d.isNotBlank()) append(d)
+                    if (wo.customerAddress.isNotBlank()) { if (isNotEmpty()) append(" · "); append(wo.customerAddress) }
+                }
+                if (sub.isNotBlank()) Text(sub, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
             }
             Text(wo.status.displayName, style = MaterialTheme.typography.labelMedium, color = repairStatusColor(wo.status))
         }
@@ -290,6 +359,7 @@ private fun WorkOrderDetail(
     var work by remember(wo.id) { mutableStateOf(wo.repair.workDescription) }
     var parts by remember(wo.id) { mutableStateOf(wo.repair.partsUsed.firstOrNull()?.name ?: "") }
     var laborCost by remember(wo.id) { mutableStateOf(wo.repair.laborCost?.toString() ?: "") }
+    var partsCost by remember(wo.id) { mutableStateOf(wo.repair.partsCost?.toString() ?: "") }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -342,18 +412,23 @@ private fun WorkOrderDetail(
         OutlinedTextField(diagnosis, { diagnosis = it }, label = { Text("진단") }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(work, { work = it }, label = { Text("작업 내용") }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(parts, { parts = it }, label = { Text("사용 부품") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(laborCost, { laborCost = it.filter { c -> c.isDigit() } }, label = { Text("공임(원)") }, modifier = Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(laborCost, { laborCost = it.filter { c -> c.isDigit() } }, label = { Text("공임(원)") }, modifier = Modifier.weight(1f))
+            OutlinedTextField(partsCost, { partsCost = it.filter { c -> c.isDigit() } }, label = { Text("부품비(원)") }, modifier = Modifier.weight(1f))
+        }
+        val totalPreview = (laborCost.toIntOrNull() ?: 0) + (partsCost.toIntOrNull() ?: 0)
+        if (totalPreview > 0) Text("합계: ${totalPreview}원", fontWeight = FontWeight.SemiBold)
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedButton(
-                onClick = { onSave(wo.copy(repair = buildRepair(wo, diagnosis, work, parts, laborCost, engineerName, inProgress = true), updatedAtMillis = now())) },
+                onClick = { onSave(wo.copy(repair = buildRepair(wo, diagnosis, work, parts, laborCost, partsCost, engineerName, inProgress = true), updatedAtMillis = now())) },
                 modifier = Modifier.weight(1f),
             ) { Text("임시 저장") }
             Button(
                 onClick = {
                     com.sangwolnongsan.nongdori.service.LocationTrackingService.stop(context)
                     val done = wo.withStatus(RepairStatus.DONE, now())
-                        .copy(repair = buildRepair(wo, diagnosis, work, parts, laborCost, engineerName, inProgress = false))
+                        .copy(repair = buildRepair(wo, diagnosis, work, parts, laborCost, partsCost, engineerName, inProgress = false))
                     onSave(done)
                     onBack()
                 },
@@ -369,6 +444,7 @@ private fun buildRepair(
     work: String,
     parts: String,
     laborCost: String,
+    partsCost: String,
     engineerName: String,
     inProgress: Boolean,
 ): RepairRecord = wo.repair.copy(
@@ -376,6 +452,7 @@ private fun buildRepair(
     workDescription = work,
     partsUsed = if (parts.isBlank()) emptyList() else listOf(PartUsage(name = parts)),
     laborCost = laborCost.toIntOrNull(),
+    partsCost = partsCost.toIntOrNull(),
     performedByName = engineerName,
     isInProgress = inProgress,
 )

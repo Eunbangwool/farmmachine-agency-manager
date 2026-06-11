@@ -25,14 +25,16 @@ import com.sangwolnongsan.nongdori.update.AppUpdateChecker
  * 앱 업데이트 다이얼로그 — 진입 시 새 버전 확인 후 결과 표시.
  * @param manual 사용자가 직접 "업데이트 확인" 누른 경우 true → GitHub 강제 새로고침 + 최신/에러도 표시.
  *               자동(앱 시작)인 경우 false → 새 버전 있을 때만 띄움(호출 측에서 제어).
+ * @param preloaded 호출 측이 이미 체크한 결과 — 있으면 재확인(중복 네트워크 호출) 생략.
  */
 @Composable
-fun UpdateDialog(manual: Boolean, onDismiss: () -> Unit) {
+fun UpdateDialog(manual: Boolean, preloaded: AppUpdateChecker.UpdateInfo? = null, onDismiss: () -> Unit) {
     val context = LocalContext.current
     var state by remember { mutableStateOf<AppUpdateChecker.CheckResult?>(null) }
 
     LaunchedEffect(manual) {
-        state = AppUpdateChecker.checkForUpdate(forceGitHubRefresh = manual)
+        state = if (!manual && preloaded != null) AppUpdateChecker.CheckResult.UpdateAvailable(preloaded)
+        else AppUpdateChecker.checkForUpdate(forceGitHubRefresh = manual)
     }
 
     val s = state

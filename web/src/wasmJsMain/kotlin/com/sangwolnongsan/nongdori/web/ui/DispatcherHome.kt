@@ -22,7 +22,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -36,13 +35,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.sangwolnongsan.nongdori.shared.data.Priority
 import com.sangwolnongsan.nongdori.shared.data.RepairStatus
 import com.sangwolnongsan.nongdori.shared.data.WorkOrder
 import com.sangwolnongsan.nongdori.shared.data.advanced
 import com.sangwolnongsan.nongdori.shared.ui.repairStatusColor
 import com.sangwolnongsan.nongdori.shared.ui.theme.BorderColor
+import com.sangwolnongsan.nongdori.shared.ui.theme.PriorityUrgent
 import com.sangwolnongsan.nongdori.shared.ui.theme.SurfaceSecondary
 import com.sangwolnongsan.nongdori.shared.ui.theme.TextSecondary
+import com.sangwolnongsan.nongdori.shared.util.formatDateTime
 import com.sangwolnongsan.nongdori.shared.util.nowMs
 import com.sangwolnongsan.nongdori.web.data.WebRepositories
 
@@ -80,7 +82,7 @@ fun DispatcherHome(dealerCode: String, onSignOut: () -> Unit) {
         }
         when (tab) {
             0 -> DispatchBoard(dealerCode, workOrders)
-            1 -> WorkOrderForm(dealerCode, onCreated = { tab = 0 })
+            1 -> WorkOrderForm(dealerCode, workOrders, onCreated = { tab = 0 })
             2 -> CustomerView(dealerCode, workOrders)
             3 -> EngineerLiveScreen(dealerCode, workOrders)
             4 -> InventoryView(dealerCode)
@@ -107,7 +109,14 @@ private fun DispatchBoard(dealerCode: String, workOrders: List<WorkOrder>) {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         columns.forEach { status ->
-            val items = workOrders.filter { it.status == status }
+            // 열린 칼럼: 긴급 우선 → 오래 기다린 순. 완료 칼럼: 최근 완료 순.
+            val items = workOrders.filter { it.status == status }.let { list ->
+                if (status == RepairStatus.DONE) list.sortedByDescending { it.completedAtMillis ?: 0L }
+                else list.sortedWith(
+                    compareByDescending<WorkOrder> { it.priority == Priority.URGENT }
+                        .thenBy { it.requestedAtMillis }
+                )
+            }
             Column(Modifier.width(260.dp)) {
                 Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     Box(Modifier.width(10.dp).height(10.dp).clip(RoundedCornerShape(5.dp)).background(repairStatusColor(status)))
@@ -132,8 +141,19 @@ private fun DispatchBoard(dealerCode: String, workOrders: List<WorkOrder>) {
 
 @Composable
 private fun WorkOrderCard(wo: WorkOrder, onAdvance: () -> Unit) {
-    Card(Modifier.fillMaxWidth().border(1.dp, BorderColor, RoundedCornerShape(8.dp))) {
+    val urgent = wo.priority == Priority.URGENT && wo.status.isOpen
+    Card(Modifier.fillMaxWidth().border(if (urgent) 2.dp else 1.dp, if (urgent) PriorityUrgent else BorderColor, RoundedCornerShape(8.dp))) {
         Column(Modifier.padding(12.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                if (urgent) {
+                    Text("긴급", color = PriorityUrgent, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                    Spacer(Modifier.width(6.dp))
+                }
+                if (wo.orderNo.isNotBlank()) Text("#${wo.orderNo}", color = TextSecondary, style = MaterialTheme.typography.labelMedium)
+                Spacer(Modifier.weight(1f))
+                val stamp = if (wo.status == RepairStatus.DONE) wo.completedAtMillis ?: 0L else wo.requestedAtMillis
+                Text(formatDateTime(stamp), color = TextSecondary, style = MaterialTheme.typography.labelSmall)
+            }
             Text(wo.customerName.ifBlank { "(고객 미상)" }, fontWeight = FontWeight.SemiBold)
             if (wo.customerPhone.isNotBlank()) Text(wo.customerPhone, color = TextSecondary, style = MaterialTheme.typography.bodySmall)
             if (wo.machineLabel.isNotBlank()) Text("기계: ${wo.machineLabel}", style = MaterialTheme.typography.bodySmall)
